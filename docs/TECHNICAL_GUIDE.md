@@ -169,7 +169,7 @@ Top-level command groups:
 - `version`
 - `wakeup`
 
-Use [COMMANDS.md](D:/Dev/codebase/Dev/Spiderweb/docs/COMMANDS.md) for the operator-facing view.
+Use [COMMANDS.md](./COMMANDS.md) for the operator-facing view.
 
 ## 8. State And Persistence
 
@@ -211,11 +211,11 @@ These are important current truths:
 ## 11. Recommended Reading Order
 
 For operators:
-1. [QUICKSTART.md](D:/Dev/codebase/Dev/Spiderweb/docs/QUICKSTART.md)
-2. [COMMANDS.md](D:/Dev/codebase/Dev/Spiderweb/docs/COMMANDS.md)
+1. [QUICKSTART.md](./QUICKSTART.md)
+2. [COMMANDS.md](./COMMANDS.md)
 
 For builders:
-1. [project.md](D:/Dev/codebase/Dev/Spiderweb/project.md)
-2. [todo-tasks.md](D:/Dev/codebase/Dev/Spiderweb/todo-tasks.md)
-3. [runtime-maintenance.md](D:/Dev/codebase/Dev/Spiderweb/docs/cookbook/runtime-maintenance.md)
-4. [bootstrap-installer.md](D:/Dev/codebase/Dev/Spiderweb/docs/cookbook/bootstrap-installer.md)
+1. `dev/project.md` if you are carrying local design notes
+2. `dev/todo-tasks.md` if you are tracking local execution work
+3. [runtime-maintenance.md](./cookbook/runtime-maintenance.md)
+4. [bootstrap-installer.md](./cookbook/bootstrap-installer.md)

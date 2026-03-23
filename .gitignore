@@ -1,0 +1,30 @@
+# Personal dev workspace
+/dev/
+/.snapshots/
+
+# Local auth and runtime state
+auth.json
+runtime.env
+bootstrap-state.env
+setup-notes.txt
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Generated and local build output
+.generated/
+/build/
+/dist/
+/tmp/
+/temp/
+
+# Runtime artifacts
+*.pid
+*.log
+maintenance-test.log
+
+# Raw local source material
+*.mhtml
+*.pdf

@@ -7,12 +7,12 @@ Use it for:
 - code snippets worth reusing
 - infrastructure setup patterns
 - interface examples
-- integration notes that are too practical for `project.md`
+- integration notes that are too practical for durable architecture docs
 
 Do not use it for:
 - task tracking
 - large vendor doc copies
-- high-level architecture truth that belongs in `project.md`
+- high-level architecture truth that belongs in the main repo docs
 
 ## Intended categories
 - `trigger-patterns.md`

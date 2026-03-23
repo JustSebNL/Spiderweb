@@ -102,8 +102,8 @@ The remaining blocker is the model-specific `vLLM` patch files referenced by the
 
 ## Local files this note relates to
 
-- `project.md`
-- `todo-tasks.md`
+- `dev/project.md` if you are keeping local design notes
+- `dev/todo-tasks.md` if you are keeping a local task tracker
 - `trigger/`
 - `infra/vllm/`
 

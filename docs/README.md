@@ -3,14 +3,13 @@
 This directory is the local documentation spine for Spiderweb.
 
 ## Start Here
-- [Quick Start](D:/Dev/codebase/Dev/Spiderweb/docs/QUICKSTART.md)
-- [Command Reference](D:/Dev/codebase/Dev/Spiderweb/docs/COMMANDS.md)
-- [Technical Guide](D:/Dev/codebase/Dev/Spiderweb/docs/TECHNICAL_GUIDE.md)
+- [Quick Start](./QUICKSTART.md)
+- [Command Reference](./COMMANDS.md)
+- [Technical Guide](./TECHNICAL_GUIDE.md)
 
 ## Supporting Docs
-- [Cookbook](D:/Dev/codebase/Dev/Spiderweb/docs/cookbook/README.md)
-- [References](D:/Dev/codebase/Dev/Spiderweb/docs/references/model-hosting-notes.md)
-- [Task Handoff](D:/Dev/codebase/Dev/Spiderweb/task-handoff.md)
+- [Cookbook](./cookbook/README.md)
+- [References](./references/model-hosting-notes.md)
 
 ## Intended Split
 - `QUICKSTART.md`: shortest working path for install and launch

@@ -3,8 +3,8 @@ package health
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -132,6 +132,9 @@ func NewServer(host string, port int) *Server {
 	mux.HandleFunc("/valve/handshake/transfer", s.valveHandshakeTransferHandler)
 	mux.HandleFunc("/valve/handshake/confirm", s.valveHandshakeConfirmHandler)
 	mux.HandleFunc("/intake/stats", s.intakeStatsHandler)
+	mux.HandleFunc("/observer/overview", s.observerOverviewHandler)
+	mux.HandleFunc("/observer/benchmarks", s.observerBenchmarksHandler)
+	mux.HandleFunc("/observer/services", s.observerServicesHandler)
 	mux.HandleFunc("/transfer/chat/start", s.transferChatStartHandler)
 	mux.HandleFunc("/transfer/chat/send", s.transferChatSendHandler)
 	mux.HandleFunc("/transfer/chat/tail", s.transferChatTailHandler)

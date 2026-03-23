@@ -69,7 +69,6 @@ By default, Spiderweb blocks the following dangerous commands:
 - Process control: `pkill`, `killall`, `kill -9`
 - Remote operations: `curl | sh`, `wget | sh`, `ssh`
 - Package management: `apt`, `yum`, `dnf`, `npm install -g`, `pip install --user`
-- Containers: `docker run`, `docker exec`
 - Git: `git push`, `git force`
 - Other: `eval`, `source *.sh`
 

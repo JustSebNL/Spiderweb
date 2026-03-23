@@ -25,13 +25,12 @@ fi
 SPIDERWEB_DIR="${SPIDERWEB_DIR:-$HOME/spiderweb}"
 INSTALL_PREFIX="${INSTALL_PREFIX:-$HOME/.local}"
 TRIGGER_DIR="${TRIGGER_DIR:-$SPIDERWEB_DIR/trigger}"
-YOUTU_DIR="${YOUTU_DIR:-$SPIDERWEB_DIR/youtu-llm}"
+BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$SPIDERWEB_DIR/brain}}"
+YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 YOUTU_MODEL_REPO="${YOUTU_MODEL_REPO:-tencent/Youtu-LLM-2B}"
 YOUTU_GGUF_REPO="${YOUTU_GGUF_REPO:-tencent/Youtu-LLM-2B-GGUF}"
 YOUTU_GGUF_FILE="${YOUTU_GGUF_FILE:-Youtu-LLM-2B-Q8_0.gguf}"
 YOUTU_CACHE_DIR="${YOUTU_CACHE_DIR:-$YOUTU_DIR/model-cache}"
-YOUTU_VLLM_IMAGE="${YOUTU_VLLM_IMAGE:-spiderweb/youtu-vllm:0.10.2}"
-YOUTU_VLLM_CONTAINER_NAME="${YOUTU_VLLM_CONTAINER_NAME:-youtu-vllm}"
 YOUTU_VLLM_PORT="${YOUTU_VLLM_PORT:-8000}"
 YOUTU_LLAMA_CPP_PORT="${YOUTU_LLAMA_CPP_PORT:-8081}"
 AUTO_START_MODEL_SERVICE="${AUTO_START_MODEL_SERVICE:-1}"
@@ -102,7 +101,7 @@ detect_package_manager() {
 }
 
 install_packages() {
-  local packages=(git make curl tar docker python3)
+  local packages=(git make curl tar python3)
 
   if ! have_cmd node; then
     packages+=(nodejs)
@@ -175,9 +174,6 @@ has_suitable_gpu() {
     return 1
   fi
   nvidia-smi >/dev/null 2>&1 || return 1
-  if ! have_cmd docker; then
-    return 1
-  fi
   return 0
 }
 
@@ -239,23 +235,6 @@ install_trigger_dependencies() {
   run_cmd "cd '$TRIGGER_DIR' && npm install"
 }
 
-build_vllm_image() {
-  local dockerfile="$SCRIPT_DIR/infra/vllm/Dockerfile.youtu-vllm"
-  if [ ! -f "$dockerfile" ]; then
-    warn "vLLM Dockerfile not found at $dockerfile"
-    return 0
-  fi
-  run_cmd "cd '$SCRIPT_DIR' && docker build -f '$dockerfile' -t '$YOUTU_VLLM_IMAGE' ."
-}
-
-start_vllm_container() {
-  if [ "$AUTO_START_MODEL_SERVICE" != "1" ]; then
-    log "Skipping model service startup because AUTO_START_MODEL_SERVICE=$AUTO_START_MODEL_SERVICE"
-    return 0
-  fi
-  run_cmd "docker inspect '$YOUTU_VLLM_CONTAINER_NAME' >/dev/null 2>&1 || docker run -d --gpus all --name '$YOUTU_VLLM_CONTAINER_NAME' --restart unless-stopped --shm-size=8g -p '$YOUTU_VLLM_PORT:8000' -v '$YOUTU_CACHE_DIR:/models' ${HF_TOKEN:+-e HF_TOKEN='$HF_TOKEN'} '$YOUTU_VLLM_IMAGE'"
-}
-
 install_llama_cpp() {
   local llama_dir="$SPIDERWEB_DIR/.cache/llama.cpp"
   local build_dir="$llama_dir/build"
@@ -309,8 +288,7 @@ EOF"
 prepare_runtime() {
   if [ "$SELECTED_RUNTIME" = "vllm" ]; then
     download_vllm_model
-    build_vllm_image
-    start_vllm_container
+    warn "Legacy bootstrap_runtime.sh no longer manages Docker containers; use the native vLLM start helpers instead."
   else
     download_gguf_model
     install_llama_cpp

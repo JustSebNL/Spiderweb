@@ -64,12 +64,15 @@ func (c *YoutuController) Stop() error {
 
 func (c *YoutuController) resolveYoutuDir() string {
 	if c == nil {
-		return filepath.Join(c.repoRoot, "youtu-llm")
+		return filepath.Join(c.repoRoot, "brain")
+	}
+	if dir := os.Getenv("BRAIN_DIR"); dir != "" {
+		return dir
 	}
 	if dir := os.Getenv("YOUTU_DIR"); dir != "" {
 		return dir
 	}
-	return filepath.Join(c.repoRoot, "youtu-llm")
+	return filepath.Join(c.repoRoot, "brain")
 }
 
 func (c *YoutuController) resolvePIDFile() string {

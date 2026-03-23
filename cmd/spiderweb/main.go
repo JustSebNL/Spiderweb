@@ -19,7 +19,6 @@ import (
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/gateway"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/migrate"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/onboard"
-	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/openclaw"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/skills"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/status"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/transfer"
@@ -27,13 +26,13 @@ import (
 )
 
 func NewSpiderwebCommand() *cobra.Command {
-	short := fmt.Sprintf("%s sweb - Intake Patch for OpenClaw v%s\n\n", internal.Logo, internal.GetVersion())
+	short := fmt.Sprintf("%s spiderweb - Intake Patch for OpenClaw v%s\n\n", internal.Logo, internal.GetVersion())
 
 	cmd := &cobra.Command{
-		Use:     "sweb",
-		Aliases: []string{"spiderweb"},
+		Use:     "spiderweb",
+		Aliases: []string{"sweb"},
 		Short:   short,
-		Example: "sweb status",
+		Example: "spiderweb status",
 	}
 
 	cmd.AddCommand(
@@ -46,7 +45,6 @@ func NewSpiderwebCommand() *cobra.Command {
 		migrate.NewMigrateCommand(),
 		skills.NewSkillsCommand(),
 		transfer.NewTransferCommand(),
-		openclaw.NewOpenClawCommand(),
 		version.NewVersionCommand(),
 	)
 

@@ -10,6 +10,6 @@ Expected files:
 - `registry.py`
 - `__init__.py`
 
-These files should be copied from the official Youtu `vLLM` integration package or equivalent upstream source before building `Dockerfile.youtu-vllm`.
+These files should be copied from the official Youtu `vLLM` integration package or equivalent upstream source before enabling the native Spiderweb `vLLM` runtime path.
 
-Until those files are added, the Docker image is scaffolded but not build-complete.
+Until those files are added, the native `vLLM` runtime remains scaffolded but not build-complete.

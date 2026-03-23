@@ -153,6 +153,25 @@ func TestMaintenance_TrimLogIfNeeded(t *testing.T) {
 	}
 }
 
+func TestMaintenance_RemoveStalePID_InvalidPID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "invalid.pid")
+	if err := os.WriteFile(pidFile, []byte("not-a-pid"), 0o644); err != nil {
+		t.Fatalf("write pid file: %v", err)
+	}
+
+	budget := 1
+	action, ok := removeStalePID(pidFile, &budget)
+	if !ok || action != "stale_pid_removed" {
+		t.Fatalf("expected invalid pid file to be removed as stale, got action=%q ok=%t", action, ok)
+	}
+	if _, err := os.Stat(pidFile); !os.IsNotExist(err) {
+		t.Fatalf("expected invalid pid file to be gone, stat err=%v", err)
+	}
+}
+
 func TestMaintenance_CollectSnapshot_DefersAndSkipsRestartWhenBusy(t *testing.T) {
 	t.Parallel()
 
@@ -207,5 +226,57 @@ func TestMaintenance_CollectSnapshot_DefersAndSkipsRestartWhenBusy(t *testing.T)
 	}
 	if state, ok := snapshot.Processes["trigger"]; ok {
 		t.Logf("trigger process state: running=%t action=%q message=%q", state.Running, state.Action, state.Message)
+	}
+}
+
+func TestMaintenance_CollectSnapshot_RestartConsumesBudget(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	triggerCtl := &fakeRuntimeController{}
+
+	svc := NewService(
+		workspace,
+		config.MaintenanceConfig{
+			Enabled:               true,
+			AutoRemediate:         true,
+			BudgetPercent:         5,
+			MaxLogMB:              1,
+			RestartBackoffMinutes: 30,
+			RestartOnProcessDeath: true,
+		},
+		config.CheapCognitionConfig{},
+		config.TriggerConfig{
+			Enabled:   true,
+			AutoStart: true,
+			Workdir:   filepath.Join(workspace, "trigger"),
+			PIDFile:   filepath.Join(workspace, "trigger.pid"),
+			LogFile:   filepath.Join(workspace, "trigger.log"),
+		},
+		nil,
+		triggerCtl,
+		nil,
+	)
+
+	logFile := filepath.Join(workspace, "trigger.log")
+	content := strings.Repeat("0123456789abcdef\n", 70000)
+	if err := os.WriteFile(logFile, []byte(content), 0o644); err != nil {
+		t.Fatalf("write log file: %v", err)
+	}
+
+	snapshot := svc.collectSnapshot(context.Background(), nil, nil, false)
+	if triggerCtl.startCalls != 1 {
+		t.Fatalf("expected one restart request within budget, got %d", triggerCtl.startCalls)
+	}
+
+	if !strings.Contains(snapshot.LastRemediationAction, "restart_requested") {
+		t.Fatalf("expected restart remediation to win the single maintenance budget slot, got %q", snapshot.LastRemediationAction)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read trigger log: %v", err)
+	}
+	if strings.HasPrefix(string(data), "[trimmed by Spiderweb maintenance]\n") {
+		t.Fatalf("expected log trim to be skipped after restart consumed the budget")
 	}
 }

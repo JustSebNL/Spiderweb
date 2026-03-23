@@ -91,6 +91,53 @@ Spiderweb can also run as a patch-in intake layer for OpenClaw, focused on cutti
 - Flow: **Services / Pipelines → Spiderweb → Queue / Valve Layer → OpenClaw**
 - Core spirit: “Dude….. no worries! I’ve got this 😏”
 
+### OpenClaw bridge setup
+
+Enable the bridge in your config:
+
+```json
+{
+  "channels": {
+    "openclaw": {
+      "enabled": true,
+      "shared_secret": "",
+      "auto_handshake": true,
+      "intake_enabled": true,
+      "webhook_path": "/bridge/openclaw"
+    }
+  }
+}
+```
+
+Start the gateway:
+
+```bash
+sweb gateway
+```
+
+Then use:
+
+```bash
+sweb openclaw status
+sweb openclaw connect --name openclaw
+sweb openclaw transfer
+```
+
+Bridge endpoints exposed by the gateway:
+- `/health`
+- `/ready`
+- `/valve/state`
+- `/bridge/openclaw`
+
+The transfer flow is:
+1. Spiderweb checks gateway health
+2. Spiderweb checks valve state
+3. Spiderweb opens a transfer chat
+4. Spiderweb introduces itself as the intake colleague
+5. OpenClaw continues as the higher-value reasoning layer
+
+See [docs/knowledge-base/openclaw-bridge.md](docs/knowledge-base/openclaw-bridge.md) for the operational guide.
+
 ## 🦾 Demonstration
 
 ### 🛠️ Standard Assistant Workflows
@@ -150,6 +197,7 @@ Spiderweb can be deployed on almost any Linux device!
 - [Quick Start](docs/QUICKSTART.md)
 - [Command Reference](docs/COMMANDS.md)
 - [Technical Guide](docs/TECHNICAL_GUIDE.md)
+- [Knowledge Base](docs/knowledge-base/README.md)
 - [Docs Index](docs/README.md)
 
 ### Install with precompiled binary
@@ -177,7 +225,7 @@ make install
 ### One-command bootstrap for Linux hosting
 
 Use the root bootstrap script when you want the system to set up Spiderweb from front to back.
-It installs prerequisites, installs Spiderweb core, prepares `youtu-llm`, inspects the host, chooses the cheap-cognition runtime, downloads the matching model format, prepares the local model service, and writes runtime settings into `~/.spiderweb/runtime.env` for automatic startup use. Trigger workspace setup is optional and disabled by default.
+It installs prerequisites, installs Spiderweb core, prepares `brain`, inspects the host, chooses the cheap-cognition runtime, downloads the matching model format, prepares the local model service, and writes runtime settings into `~/.spiderweb/runtime.env` for automatic startup use. Trigger workspace setup is optional and disabled by default.
 
 `bootstrap.sh` is the only user-facing install command.
 Anything under `scripts/` is an internal setup chapter used by the bootstrap flow, not a separate installer you are expected to run manually.
@@ -203,7 +251,7 @@ By default, the bootstrap path uses `bootstrap.conf` (next to the script). You c
 # bootstrap.conf example
 SPIDERWEB_DIR="/opt/spiderweb"
 INSTALL_PREFIX="/opt/spiderweb/.local"
-YOUTU_DIR="/opt/spiderweb/youtu-llm"
+BRAIN_DIR="/opt/spiderweb/brain"
 CHEAP_COGNITION_RUNTIME="auto"
 AUTO_START_MODEL_SERVICE="1"
 ```
@@ -215,50 +263,6 @@ After bootstrap, Spiderweb auto-loads `~/.spiderweb/runtime.env`, so the intende
 ```bash
 ./bootstrap.sh
 sweb wakeup
-```
-
-## 🐳 Docker Compose
-
-You can also run Spiderweb using Docker Compose without installing anything locally.
-
-```bash
-# 1. Clone this repo
-git clone https://github.com/JustSebNL/Spiderweb.git
-cd spiderweb
-
-# 2. Set your API keys
-cp config/config.example.json config/config.json
-vim config/config.json      # Set DISCORD_BOT_TOKEN, API keys, etc.
-
-# 3. Build & Start
-docker compose --profile gateway up -d
-
-> [!TIP]
-> **Docker Users**: By default, the Gateway listens on `127.0.0.1` which is not accessible from the host. If you need to access the health endpoints or expose ports, set `SPIDERWEB_GATEWAY_HOST=0.0.0.0` in your environment or update `config.json`.
-
-
-# 4. Check logs
-docker compose logs -f spiderweb-gateway
-
-# 5. Stop
-docker compose --profile gateway down
-```
-
-### Agent Mode (One-shot)
-
-```bash
-# Ask a question
-docker compose run --rm spiderweb-agent -m "What is 2+2?"
-
-# Interactive mode
-docker compose run --rm spiderweb-agent
-```
-
-### Rebuild
-
-```bash
-docker compose --profile gateway build --no-cache
-docker compose --profile gateway up -d
 ```
 
 ### 🚀 Quick Start
@@ -549,7 +553,7 @@ spiderweb gateway
 
 > In group chats, the bot responds only when @mentioned. Replies quote the original message.
 
-> **Docker Compose**: Add `ports: ["18791:18791"]` to the `spiderweb-gateway` service to expose the webhook port.
+> If you are proxying Spiderweb from another host or runtime layer, expose port `18791` and set `SPIDERWEB_GATEWAY_HOST=0.0.0.0`.
 
 </details>
 

@@ -120,6 +120,20 @@ Current maintenance behaviors:
 Important files:
 - `pkg/maintenance/service.go`
 - `docs/cookbook/runtime-maintenance.md`
+- `docs/design/observer-control-plane.html`
+
+### Control-plane direction
+
+The next architectural layer above maintenance is a system-wide observer/control plane:
+- observer above services, not inside pipeline ownership
+- self-care remains bounded and action-focused
+- dashboard reads from observer state rather than scraping each service directly
+- benchmark history should preserve startup baseline, pre-care check, and post-care result
+- persistence should be split between `system.db` and `agent.db`
+
+Interactive design reference:
+- [Observer Control Plane](./design/observer-control-plane.html)
+- [Observer Control Plane Design](./design/observer-control-plane.md)
 
 ## 6. Pipeline Checks
 

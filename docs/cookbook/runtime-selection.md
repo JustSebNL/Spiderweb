@@ -12,12 +12,11 @@ The user should run one command on a mostly bare host. The bootstrap process sho
 ### Prefer `vLLM` when
 - a suitable NVIDIA GPU is present
 - `nvidia-smi` works
-- Docker is available
-- the host is appropriate for the self-hosted Trigger.dev worker path
+- the host can support a native local `vLLM` process
 
 ### Fall back to `llama.cpp` when
 - no supported GPU is detected
-- NVIDIA runtime is unavailable
+- native `vLLM` prerequisites are unavailable
 - the machine is better suited to a CPU-first or lightweight local path
 
 ## Why this matters

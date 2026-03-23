@@ -130,11 +130,20 @@ Use transfer commands to manage service handoff documents and transfer coordinat
 
 ```bash
 sweb openclaw status
-sweb openclaw connect
+sweb openclaw connect --name openclaw
 sweb openclaw transfer
+sweb openclaw transfer --service inbox
+sweb openclaw transfer --dry-run
 ```
 
 Use OpenClaw commands when Spiderweb is acting as the intake/bridge layer.
+
+Practical bridge path:
+- enable `channels.openclaw` in config
+- start `sweb gateway`
+- run `sweb openclaw status`
+- use `sweb openclaw connect` for a direct bridge test
+- use `sweb openclaw transfer` for the full handoff sequence
 
 ## Practical Sequences
 

@@ -10,11 +10,11 @@ One root shell command should be able to prepare a mostly bare Linux host so Spi
 2. Install required system packages.
 3. Make sure `git-lfs` is installed and initialized for the current user.
 4. Install Spiderweb core using the internal core-install chapter.
-5. Prepare `youtu-llm/` and model cache directories.
+5. Prepare `brain/` and model cache directories.
 6. Install Hugging Face download tooling.
 7. Inspect hardware and choose runtime autonomously.
-8. If GPU path is suitable: pull standard Youtu weights into the local `youtu-llm/` area and prepare `vLLM`.
-9. If GPU path is not suitable: pull GGUF weights into the local `youtu-llm/` area and prepare `llama.cpp`.
+8. If GPU path is suitable: pull standard Youtu weights into the local `brain/` area and prepare `vLLM`.
+9. If GPU path is not suitable: pull GGUF weights into the local `brain/` area and prepare `llama.cpp`.
 10. Generate runtime env values for the chosen local endpoint.
 11. Write those values to Spiderweb home as `~/.spiderweb/runtime.env` so startup can consume them automatically.
 12. Write setup guidance to `~/.spiderweb/setup-notes.txt` for any provider keys still needed after bootstrap.

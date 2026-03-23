@@ -4,7 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-YOUTU_DIR="${YOUTU_DIR:-$REPO_DIR/youtu-llm}"
+BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$REPO_DIR/brain}}"
+YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 YOUTU_CACHE_DIR="${YOUTU_CACHE_DIR:-$YOUTU_DIR/model-cache}"
 YOUTU_VLLM_VENV="${YOUTU_VLLM_VENV:-$YOUTU_DIR/.venv-vllm}"
 YOUTU_VLLM_PORT="${YOUTU_VLLM_PORT:-8000}"

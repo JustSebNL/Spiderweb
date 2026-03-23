@@ -1,0 +1,1470 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spiderweb Observer Control Plane</title>
+  <style>
+    :root {
+      --bg-0: #070707;
+      --bg-1: #101011;
+      --bg-2: #181517;
+      --panel: rgba(255, 255, 255, 0.06);
+      --panel-soft: rgba(255, 255, 255, 0.02);
+      --panel-edge: rgba(255, 255, 255, 0.18);
+      --text: #fff7f1;
+      --muted: #d8d1cf;
+      --core: #ffb84f;
+      --care: #ff7448;
+      --log: #ffe173;
+      --wood: #8f4227;
+      --wood-dark: #4f2016;
+      --header-brown: #b97a62;
+      --good: #ffd36b;
+      --warn: #ff9c56;
+      --bad: #ff6147;
+      --idle: #ffcf91;
+      --glow-fire: 0 0 22px rgba(255, 145, 85, 0.1);
+      --glow-gold: 0 0 14px rgba(255, 198, 107, 0.07);
+      --glow-wood: 0 0 10px rgba(185, 122, 98, 0.08);
+      --shadow: 0 28px 72px rgba(0, 0, 0, 0.34);
+      --radius-xl: 30px;
+      --radius-lg: 22px;
+      --radius-md: 18px;
+      --radius-sm: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      min-height: 100%;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at 16% 10%, rgba(176, 76, 255, 0.32), transparent 18%),
+        radial-gradient(circle at 50% 92%, rgba(255, 78, 72, 0.22), transparent 24%),
+        radial-gradient(circle at 86% 88%, rgba(255, 216, 84, 0.22), transparent 18%),
+        linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(115deg, rgba(255, 255, 255, 0.025), transparent 32%, rgba(255, 255, 255, 0.018) 68%, transparent),
+        radial-gradient(circle at top, rgba(255, 241, 223, 0.06), transparent 22%);
+      pointer-events: none;
+    }
+
+    a {
+      color: #ffca8d;
+    }
+
+    .shell {
+      max-width: 1420px;
+      margin: 0 auto;
+      padding: 32px 22px 60px;
+    }
+
+    .browser-bar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--panel-edge);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+        linear-gradient(180deg, rgba(42, 32, 27, 0.16), rgba(16, 12, 10, 0.24));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      margin-bottom: 18px;
+    }
+
+    .traffic {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .traffic span {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .traffic .r { background: #ff6f64; }
+    .traffic .y { background: #f8c04e; }
+    .traffic .g { background: #62cc7f; }
+
+    .url-pill {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      padding: 11px 18px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.94rem;
+      letter-spacing: 0.02em;
+    }
+
+    .browser-actions {
+      display: flex;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .browser-actions span {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: 84px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .rail,
+    .board,
+    .glass {
+      border: 1px solid var(--panel-edge);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .rail::before,
+    .board::before,
+    .glass::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.04), transparent 22%);
+      pointer-events: none;
+    }
+
+    .rail {
+      padding: 18px 12px;
+      border-radius: 26px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+        linear-gradient(180deg, rgba(24, 22, 24, 0.16), rgba(10, 10, 11, 0.22));
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+      position: sticky;
+      top: 22px;
+    }
+
+    .rail .logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      display: grid;
+      place-items: center;
+      font-size: 1.15rem;
+      box-shadow: var(--glow-fire);
+    }
+
+    .rail-btn {
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+      font-size: 1rem;
+      transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
+    }
+
+    .rail-btn:hover,
+    .rail-btn.active {
+      transform: translateY(-2px);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+      border-color: rgba(255, 255, 255, 0.16);
+      color: var(--text);
+      box-shadow: var(--glow-fire);
+    }
+
+    .board {
+      border-radius: var(--radius-xl);
+      padding: 26px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+        linear-gradient(180deg, rgba(43, 33, 27, 0.14), rgba(17, 12, 10, 0.22));
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 0.74rem;
+      color: var(--header-brown);
+      text-shadow: var(--glow-wood);
+      margin-bottom: 10px;
+    }
+
+    .hero h1,
+    .section-head h2,
+    .profile-card h2,
+    .glass h3 {
+      margin: 0;
+      letter-spacing: -0.03em;
+      line-height: 1.06;
+      color: #fff3e8;
+      text-shadow: var(--glow-wood);
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      margin-bottom: 10px;
+    }
+
+    .hero p,
+    .muted,
+    .glass p,
+    .glass li,
+    .mini,
+    .meta-line {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .hero p {
+      max-width: 65ch;
+      margin: 0 0 16px;
+    }
+
+    .chip-row,
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip,
+    .btn,
+    .menu-toggle,
+    .status-pill {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 9px 13px;
+      font: inherit;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .chip {
+      font-size: 0.92rem;
+    }
+
+    .btn,
+    .menu-toggle {
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .btn:hover,
+    .btn:focus-visible,
+    .menu-toggle:hover,
+    .menu-toggle:focus-visible,
+    .status-pill:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: var(--glow-gold);
+      outline: none;
+    }
+
+    .btn.active {
+      background:
+        linear-gradient(135deg, rgba(255, 184, 79, 0.1), rgba(255, 116, 72, 0.04) 55%, rgba(255, 255, 255, 0.1));
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .glass {
+      border-radius: var(--radius-lg);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+        linear-gradient(180deg, rgba(42, 32, 27, 0.08), rgba(18, 12, 10, 0.14));
+      padding: 18px;
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .glass:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255, 255, 255, 0.16);
+      box-shadow: 0 22px 48px rgba(0, 0, 0, 0.28);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
+        linear-gradient(180deg, rgba(50, 38, 31, 0.1), rgba(20, 14, 12, 0.16));
+    }
+
+    .profile-card {
+      display: grid;
+      gap: 16px;
+    }
+
+    .profile-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .avatar-wrap {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .avatar {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 30%, rgba(255, 220, 162, 0.5), transparent 22%),
+        linear-gradient(180deg, rgba(255, 184, 79, 0.8), rgba(255, 97, 71, 0.72));
+      border: 2px solid rgba(255, 225, 176, 0.22);
+      box-shadow: var(--glow-gold);
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .metric {
+      min-height: 128px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-bottom: 8px;
+    }
+
+    .metric .value {
+      font-size: 2.2rem;
+      line-height: 1;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.04em;
+    }
+
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .idle { color: var(--idle); }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 0.94fr;
+      gap: 18px;
+    }
+
+    .section-head,
+    .line-head,
+    .agent-head,
+    .menu-shell,
+    .timeline-item,
+    .rowline {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .section-head {
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+
+    .menu-shell {
+      justify-content: flex-end;
+      margin-bottom: 14px;
+    }
+
+    .menu {
+      position: relative;
+    }
+
+    .menu-panel {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: 280px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+        linear-gradient(180deg, rgba(25, 22, 24, 0.32), rgba(10, 10, 11, 0.42));
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.48);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      padding: 12px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(10px) scale(0.98);
+      transition: opacity 180ms ease, visibility 180ms ease, transform 180ms ease;
+      z-index: 10;
+    }
+
+    .menu.open .menu-panel,
+    .menu:hover .menu-panel,
+    .menu:focus-within .menu-panel {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
+
+    .menu-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .menu-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      padding: 11px 12px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+    }
+
+    .menu-item:hover,
+    .menu-item:focus-visible {
+      transform: translateX(2px);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.16);
+      outline: none;
+    }
+
+    .menu-item span {
+      display: block;
+    }
+
+    .charts {
+      display: grid;
+      gap: 16px;
+    }
+
+    .chart-card {
+      min-height: 310px;
+    }
+
+    .chart-surface {
+      height: 210px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+
+    .chart-surface::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to top, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 100% 34px, 72px 100%;
+      opacity: 0.35;
+    }
+
+    .line {
+      position: absolute;
+      inset: 0;
+    }
+
+    .line svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .line path {
+      fill: none;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 10px rgba(255, 132, 75, 0.18));
+    }
+
+    .line .a {
+      stroke: rgba(255, 184, 79, 0.95);
+    }
+
+    .line .b {
+      stroke: rgba(255, 241, 219, 0.8);
+      stroke-dasharray: 10 8;
+      stroke-width: 3;
+    }
+
+    .spark-tag {
+      position: absolute;
+      top: 48px;
+      left: 32%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      box-shadow: var(--glow-fire);
+    }
+
+    .lower-grid {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .goal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .mini-card {
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 14px;
+      transition: transform 160ms ease, border-color 160ms ease;
+    }
+
+    .mini-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .ring-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .ring {
+      width: 102px;
+      height: 102px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, rgba(31, 11, 8, 0.9) 48%, transparent 50%),
+        conic-gradient(var(--care) 0 220deg, rgba(255, 255, 255, 0.08) 220deg 360deg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: var(--glow-fire);
+      position: relative;
+    }
+
+    .ring::after {
+      content: "65%";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .agent-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .agent-card {
+      padding: 16px;
+    }
+
+    .agent-name {
+      font-size: 1.02rem;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.8rem;
+      transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+    }
+
+    .badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 12px currentColor;
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+
+    .agent-card:hover .badge,
+    .profile-card:hover .badge {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .detail-trigger {
+      appearance: none;
+      margin-top: 12px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #ffd39b;
+      font: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: color 160ms ease, transform 160ms ease;
+    }
+
+    .detail-trigger:hover,
+    .detail-trigger:focus-visible {
+      color: #fff1de;
+      transform: translateX(2px);
+      outline: none;
+    }
+
+    .detail-drawer {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      width: min(420px, calc(100vw - 32px));
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+        linear-gradient(180deg, rgba(25, 22, 24, 0.28), rgba(10, 10, 11, 0.38));
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.48);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      padding: 18px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(16px);
+      transition: opacity 180ms ease, visibility 180ms ease, transform 180ms ease;
+      z-index: 30;
+    }
+
+    .detail-drawer.open {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .detail-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .detail-close {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .detail-close:hover,
+    .detail-close:focus-visible {
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .timeline-item {
+      border-top: 1px solid rgba(255, 198, 128, 0.08);
+      padding-top: 10px;
+      align-items: flex-start;
+    }
+
+    .timeline-item:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .toast-stage {
+      min-height: 250px;
+      display: grid;
+      align-items: end;
+    }
+
+    .toast-stack {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      width: min(420px, calc(100vw - 32px));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 40;
+      pointer-events: none;
+    }
+
+    .notif {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 14px;
+      border-radius: var(--radius-md);
+      padding: 14px;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.96), rgba(8, 8, 8, 0.98));
+      border: 1px solid rgba(255, 198, 128, 0.12);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+      transition:
+        transform 220ms ease,
+        border-color 220ms ease,
+        opacity 220ms ease,
+        filter 220ms ease,
+        background 15000ms linear,
+        box-shadow 15000ms linear,
+        backdrop-filter 15000ms linear,
+        -webkit-backdrop-filter 15000ms linear;
+      pointer-events: auto;
+      backdrop-filter: blur(0);
+      -webkit-backdrop-filter: blur(0);
+    }
+
+    .notif:hover {
+      transform: translateX(2px);
+      border-color: rgba(255, 198, 128, 0.2);
+    }
+
+    .notif-icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 1.2rem;
+      border: 1px solid currentColor;
+      box-shadow: 0 0 18px rgba(255, 255, 255, 0.08);
+    }
+
+    .notif.info { color: #9fd0ff; }
+    .notif.success { color: #9cff8d; }
+    .notif.warning { color: var(--warn); }
+    .notif.error { color: var(--bad); }
+
+    .notif.glass-phase {
+      background:
+        linear-gradient(180deg, rgba(255, 236, 214, 0.08), rgba(255, 236, 214, 0.02)),
+        linear-gradient(180deg, rgba(67, 28, 18, 0.34), rgba(14, 6, 5, 0.44));
+      border-color: rgba(255, 198, 128, 0.18);
+      box-shadow: 0 26px 60px rgba(0, 0, 0, 0.44);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+
+    .notif.fading {
+      opacity: 0;
+      filter: blur(8px);
+      transform: translateY(10px);
+      transition:
+        opacity 5000ms linear,
+        filter 5000ms linear,
+        transform 5000ms ease;
+    }
+
+    .prog {
+      margin-top: 10px;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .prog > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(255, 184, 79, 0.92), rgba(255, 116, 72, 0.88));
+      box-shadow: var(--glow-fire);
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.18); opacity: 0.72; }
+    }
+
+    @media (max-width: 1180px) {
+      .topbar,
+      .main-grid,
+      .lower-grid,
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        position: static;
+        grid-auto-flow: column;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        justify-items: stretch;
+      }
+
+      .rail .logo {
+        display: none;
+      }
+
+      .goal-grid,
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="browser-bar">
+      <div class="traffic">
+        <span class="r"></span>
+        <span class="y"></span>
+        <span class="g"></span>
+      </div>
+      <div class="url-pill">spiderweb.local/observer/dashboard</div>
+      <div class="browser-actions">
+        <span>↗</span>
+        <span>↓</span>
+        <span>+</span>
+        <span>□</span>
+      </div>
+    </section>
+
+    <section class="dashboard">
+      <aside class="rail">
+        <div class="logo">⟠</div>
+        <div class="rail-btn active">⌂</div>
+        <div class="rail-btn">◎</div>
+        <div class="rail-btn">⌁</div>
+        <div class="rail-btn">⚠</div>
+        <div class="rail-btn">☰</div>
+        <div class="rail-btn">⟳</div>
+      </aside>
+
+      <section class="board">
+        <div class="topbar">
+          <article class="hero glass">
+            <div class="eyebrow">Observer Control Plane</div>
+            <h1>Glass-Forged Runtime Oversight</h1>
+            <p>
+              Spiderweb’s observer stays above services, tracks drift, logs self-care outcomes, and exposes the
+              system state needed for operators to understand which services and pipeline agents are healthy,
+              degraded, restarting, or offline.
+            </p>
+            <div class="chip-row">
+              <span class="chip">Core runtime: 90%</span>
+              <span class="chip">Self-care: 5%</span>
+              <span class="chip">Logging: 5%</span>
+              <span class="chip">Storage: system.db + agent.db</span>
+            </div>
+          </article>
+
+          <aside class="profile-card glass">
+            <div class="profile-head">
+              <div class="avatar-wrap">
+                <div class="avatar"></div>
+                <div>
+                  <div class="eyebrow" style="margin-bottom:6px;">Mode</div>
+                  <h2>Default Dashboard</h2>
+                  <div class="muted">Observer-backed operator surface</div>
+                </div>
+              </div>
+              <span class="status-pill">● Live</span>
+            </div>
+            <div class="controls">
+              <span class="badge good"><span class="dot"></span> Healthy</span>
+              <span class="badge warn"><span class="dot"></span> Needs attention</span>
+            </div>
+            <div class="menu-shell">
+              <div class="menu" id="dashboard-menu">
+                <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="dashboard-menu-panel">Open control menu</button>
+                <div class="menu-panel" id="dashboard-menu-panel">
+                  <div class="menu-list">
+                    <button class="menu-item" type="button">
+                      <span>Switch to debug mode</span>
+                      <span class="mini">Reveal richer event payloads and remediation reasoning.</span>
+                    </button>
+                    <button class="menu-item" type="button">
+                      <span>Focus pipeline agents</span>
+                      <span class="mini">Filter the board by online, degraded, restarting, or offline agents.</span>
+                    </button>
+                    <button class="menu-item" type="button">
+                      <span>Export HTML report</span>
+                      <span class="mini">Capture baseline, self-care, and current runtime state.</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <section class="status-grid">
+          <article class="glass metric">
+            <div class="label">Services up</div>
+            <div class="value good">12</div>
+            <div class="meta-line">Gateway, Trigger, cheap runtime, observer-adjacent services</div>
+            <button class="detail-trigger" type="button" data-detail-title="Services up" data-detail-body="Observer summary: one service remains in watch state, but no hard outage is blocking core runtime work.">Read more...</button>
+          </article>
+          <article class="glass metric">
+            <div class="label">Agents online</div>
+            <div class="value idle">24</div>
+            <div class="meta-line">Across intake, triage, transfer, and watch pipelines</div>
+            <button class="detail-trigger" type="button" data-detail-title="Agents online" data-detail-body="This count comes from summarized agent presence, not transcript scraping. The observer should read status summaries rather than raw pipeline transcripts by default.">Read more...</button>
+          </article>
+          <article class="glass metric">
+            <div class="label">Needs attention</div>
+            <div class="value warn">2</div>
+            <div class="meta-line">One degraded service, one offline pipeline agent</div>
+            <button class="detail-trigger" type="button" data-detail-title="Needs attention" data-detail-body="Degraded means reachable but drifted or unstable, not necessarily hard-down. Offline remains a separate state and should be surfaced more aggressively.">Read more...</button>
+          </article>
+          <article class="glass metric">
+            <div class="label">Last self-care delta</div>
+            <div class="value good">+13</div>
+            <div class="meta-line">Post-care score improved over the pre-care check</div>
+            <button class="detail-trigger" type="button" data-detail-title="Last self-care delta" data-detail-body="Baseline, pre-care, and post-care remain separate benchmark records. The observer should log all three so improvement, failure, and regression stay measurable.">Read more...</button>
+          </article>
+        </section>
+
+        <section class="main-grid">
+          <div class="charts">
+            <article class="glass chart-card">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">System Drift</div>
+                  <h2>Health and benchmark motion</h2>
+                </div>
+                <button class="btn active" data-view="overview">Overview</button>
+              </div>
+              <div class="controls" style="margin-bottom:10px;">
+                <button class="btn active" data-view="overview">Overview</button>
+                <button class="btn" data-view="flow">Runtime flow</button>
+                <button class="btn" data-view="benchmark">Benchmark cycle</button>
+                <button class="btn" data-view="storage">Storage split</button>
+              </div>
+
+              <section class="panel" data-panel="overview">
+                <div class="chart-surface">
+                  <div class="spark-tag">14:05 post-care +13</div>
+                  <div class="line">
+                    <svg viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true">
+                      <path class="a" d="M40,220 C120,170 180,150 260,144 C340,138 390,178 470,182 C560,186 618,145 705,126 C786,108 864,78 960,60"></path>
+                      <path class="b" d="M40,174 C130,172 220,168 300,164 C394,159 474,158 560,154 C642,151 740,145 960,138"></path>
+                    </svg>
+                  </div>
+                </div>
+                <div class="footer-note">
+                  The observer tracks runtime drift against the startup baseline and preserves benchmark state before and after self-care.
+                </div>
+              </section>
+
+              <section class="panel hidden" data-panel="flow">
+                <div class="timeline">
+                  <div class="timeline-item">
+                    <div class="mini">1. Services emit structured signals</div>
+                    <div class="mini">Gateway, Trigger, cheap runtime, and pipeline managers publish small health and event summaries.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">2. Pipeline managers own pipelines</div>
+                    <div class="mini">Detailed pipeline and agent activity is written into <code>agent.db</code>.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">3. Observer aggregates system state</div>
+                    <div class="mini">System-wide health, drift, and remediation history are written into <code>system.db</code>.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">4. Self-care runs bounded actions</div>
+                    <div class="mini">Only allowed cleanup and restart-request behaviors run inside the self-care budget.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">5. Dashboard reads observer state</div>
+                    <div class="mini">The dashboard does not scrape raw service internals by default.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel hidden" data-panel="benchmark">
+                <div class="lower-grid" style="margin-top:0;">
+                  <div class="glass">
+                    <div class="eyebrow">Baseline</div>
+                    <h3 class="good" style="font-size:2rem;">96</h3>
+                    <p>Captured near startup and held as the benchmark anchor for future checks.</p>
+                  </div>
+                  <div class="glass">
+                    <div class="eyebrow">Pre-care check</div>
+                    <h3 class="warn" style="font-size:2rem;">71</h3>
+                    <p>Shows how far the runtime drifted before self-care acted.</p>
+                  </div>
+                  <div class="glass">
+                    <div class="eyebrow">Post-care result</div>
+                    <h3 class="good" style="font-size:2rem;">84</h3>
+                    <p>Used to measure whether the bounded self-care cycle improved runtime health.</p>
+                  </div>
+                  <div class="glass">
+                    <div class="eyebrow">Rule</div>
+                    <p>Never overwrite the pre-care check. Preserve all three views so the observer can detect improvement, failure, or regression.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel hidden" data-panel="storage">
+                <div class="lower-grid" style="margin-top:0;">
+                  <article class="glass">
+                    <div class="eyebrow">system.db</div>
+                    <h3>Control-plane truth</h3>
+                    <ul>
+                      <li>service registry and current up/down state</li>
+                      <li>observer events and benchmark snapshots</li>
+                      <li>self-care cycles and remediation history</li>
+                      <li>dashboard and report query surface</li>
+                    </ul>
+                  </article>
+                  <article class="glass">
+                    <div class="eyebrow">agent.db</div>
+                    <h3>Pipeline detail</h3>
+                    <ul>
+                      <li>pipeline manager state and queue depth</li>
+                      <li>agent events and task-level history</li>
+                      <li>session traces and detailed error records</li>
+                      <li>not the observer’s default data source</li>
+                    </ul>
+                  </article>
+                </div>
+              </section>
+            </article>
+
+            <div class="lower-grid">
+              <article class="glass">
+                <div class="eyebrow">Runtime Guardrails</div>
+                <h3>Budget and hard caps</h3>
+                <div class="mini">The budget split is policy, not permission for infinite memory or logs.</div>
+                <div class="prog"><span style="width:90%;"></span></div>
+                <div class="line-head mini" style="margin-top:8px;"><span>Core runtime</span><span>90%</span></div>
+                <div class="prog"><span style="width:5%;"></span></div>
+                <div class="line-head mini" style="margin-top:8px;"><span>Self-care</span><span>5%</span></div>
+                <div class="prog"><span style="width:5%;"></span></div>
+                <div class="line-head mini" style="margin-top:8px;"><span>Logging</span><span>5%</span></div>
+                <button class="detail-trigger" type="button" data-detail-title="Runtime guardrails" data-detail-body="Hard caps still matter: database size, retention windows, concurrency limits, and bounded action counts. The 90/5/5 split is policy, not permission for unbounded resource use.">Read more...</button>
+              </article>
+
+              <article class="glass">
+                <div class="eyebrow">Last 24 Hours</div>
+                <h3>Errors and critical events</h3>
+                <div class="goal-grid">
+                  <div class="mini-card">
+                    <div class="label">Errors</div>
+                    <div class="value bad" style="font-size:1.5rem;">17</div>
+                    <div class="mini">Across services, managers, and observer-tracked agent summaries</div>
+                  </div>
+                  <div class="mini-card">
+                    <div class="label">Critical events</div>
+                    <div class="value warn" style="font-size:1.5rem;">4</div>
+                    <div class="mini">Offline agents, failed restarts, and hard-degraded service moments</div>
+                  </div>
+                </div>
+                <div class="timeline">
+                  <div class="timeline-item">
+                    <div class="mini">06:20</div>
+                    <div class="mini">cheap-runtime crossed the observer error threshold after repeated latency spikes.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">11:42</div>
+                    <div class="mini">watch-agent-03 dropped offline and triggered a restart-request critical event.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">13:14</div>
+                    <div class="mini">Trigger worker recovered after self-care cleanup and re-registration.</div>
+                  </div>
+                </div>
+                <button class="detail-trigger" type="button" data-detail-title="Last 24 hours" data-detail-body="The observer dashboard should expose rolling 24-hour stats for errors and critical events. This gives operators short-horizon operational context instead of only current status snapshots.">Read more...</button>
+              </article>
+
+              <article class="glass">
+                <div class="eyebrow">Last cycle</div>
+                <h3>Self-care timeline</h3>
+                <div class="timeline">
+                  <div class="timeline-item">
+                    <div class="mini">14:00</div>
+                    <div class="mini">Observer detected latency drift above baseline for cheap-runtime.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">14:03</div>
+                    <div class="mini">Self-care requested restart for watch-agent-03 after dead process detection.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">14:05</div>
+                    <div class="mini">Post-care benchmark rose from 71 to 84 without exceeding maintenance budget.</div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="charts">
+            <article class="glass">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Pipeline Presence</div>
+                  <h2>Active agents and status</h2>
+                </div>
+                <span class="badge good"><span class="dot"></span> Observer-backed</span>
+              </div>
+              <div class="agent-grid">
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">intake-agent-01</div>
+                    <span class="badge good"><span class="dot"></span> Online</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Intake</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-intake</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Busy classifying queue batch</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>3s ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="intake-agent-01" data-detail-body="Recent task: normalized 44 inbound events and routed 6 for escalation. The observer should display this as a summary, not a transcript.">Read more...</button>
+                </article>
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">triage-agent-02</div>
+                    <span class="badge warn"><span class="dot"></span> Degraded</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Triage</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-triage</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Latency drift above baseline</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>11s ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="triage-agent-02" data-detail-body="Observer note: still online, but may trigger self-care if drift persists. Degraded does not mean offline, and the dashboard should keep those states separate.">Read more...</button>
+                </article>
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">transfer-agent-04</div>
+                    <span class="badge idle"><span class="dot"></span> Idle</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Transfer</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-transfer</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Standing by for kickoff packet</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>5s ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="transfer-agent-04" data-detail-body="Recent task: packaged the last handoff sheet and returned to idle. Idle should be visible as a first-class state, not hidden inside generic online status.">Read more...</button>
+                </article>
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">watch-agent-03</div>
+                    <span class="badge bad"><span class="dot"></span> Offline</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Watch</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-watch</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Restart requested by self-care</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>8m ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="watch-agent-03" data-detail-body="Offline state is surfaced in the dashboard without exposing transcript-level content. Restart-request and offline status should be visible in one view.">Read more...</button>
+                </article>
+              </div>
+            </article>
+
+            <article class="glass">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Composition</div>
+                  <h2>Panel use and visual modules</h2>
+                </div>
+              </div>
+              <div class="goal-grid">
+                <div class="mini-card">
+                  <div class="label">Observer actions</div>
+                  <div class="value good" style="font-size:1.5rem;">5</div>
+                  <div class="prog"><span style="width:60%;"></span></div>
+                </div>
+                <div class="mini-card">
+                  <div class="label">Remediation success</div>
+                  <div class="value warn" style="font-size:1.5rem;">89%</div>
+                  <div class="prog"><span style="width:89%;"></span></div>
+                </div>
+              </div>
+              <div class="ring-row">
+                <div class="ring"></div>
+                <div class="mini">
+                  Glass panels should hold core status, service placement, benchmark deltas, and agent presence without feeling like a generic admin grid.
+                </div>
+              </div>
+            </article>
+
+            <article class="glass">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Notification Behavior</div>
+                  <h2>Toast-based observer alerts</h2>
+                </div>
+              </div>
+              <div class="mini">
+                Observer warnings should appear as timed bottom-right toasts. The oldest toast stays at the top of the stack, newer ones enter below it, and each item fades away after its own timeout.
+              </div>
+              <div class="controls" style="margin-top:14px;">
+                <button class="btn" type="button" id="toast-info-btn">Spawn info</button>
+                <button class="btn" type="button" id="toast-success-btn">Spawn success</button>
+                <button class="btn" type="button" id="toast-warning-btn">Spawn warning</button>
+                <button class="btn" type="button" id="toast-error-btn">Spawn error</button>
+              </div>
+              <div class="toast-stage mini">
+                Live demo uses the bottom-right stack rather than this panel.
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <aside class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></aside>
+
+  <aside class="detail-drawer" id="detail-drawer" aria-live="polite">
+    <div class="detail-head">
+      <div>
+        <div class="eyebrow">Context</div>
+        <h3 id="detail-title">Detail</h3>
+      </div>
+      <button class="detail-close" type="button" id="detail-close">Close</button>
+    </div>
+    <div class="mini" id="detail-body">Select a card detail to read more.</div>
+  </aside>
+
+  <script>
+    const buttons = document.querySelectorAll("[data-view]");
+    const panels = document.querySelectorAll("[data-panel]");
+    const menu = document.getElementById("dashboard-menu");
+    const menuToggle = menu ? menu.querySelector(".menu-toggle") : null;
+    const toastStack = document.getElementById("toast-stack");
+    const toastButtons = {
+      info: document.getElementById("toast-info-btn"),
+      success: document.getElementById("toast-success-btn"),
+      warning: document.getElementById("toast-warning-btn"),
+      error: document.getElementById("toast-error-btn")
+    };
+    const detailDrawer = document.getElementById("detail-drawer");
+    const detailTitle = document.getElementById("detail-title");
+    const detailBody = document.getElementById("detail-body");
+    const detailClose = document.getElementById("detail-close");
+    const detailTriggers = document.querySelectorAll(".detail-trigger");
+    let activeToast = null;
+    let toastTimers = [];
+
+    function clearToastTimers() {
+      toastTimers.forEach((timer) => window.clearTimeout(timer));
+      toastTimers = [];
+    }
+
+    function processToastQueue() {
+      if (!toastStack || activeToast) {
+        return;
+      }
+
+      const toast = toastStack.firstElementChild;
+      if (!toast) {
+        return;
+      }
+
+      activeToast = toast;
+
+      const darkPhaseMs = 45000;
+      const glassPhaseMs = 15000;
+      const fadePhaseMs = 5000;
+
+      const glassTimer = window.setTimeout(() => {
+        toast.classList.add("glass-phase");
+      }, darkPhaseMs);
+
+      const fadeTimer = window.setTimeout(() => {
+        toast.classList.add("fading");
+      }, darkPhaseMs + glassPhaseMs);
+
+      const removeTimer = window.setTimeout(() => {
+        if (toast.parentElement) {
+          toast.remove();
+        }
+        activeToast = null;
+        clearToastTimers();
+        processToastQueue();
+      }, darkPhaseMs + glassPhaseMs + fadePhaseMs);
+
+      toastTimers = [glassTimer, fadeTimer, removeTimer];
+    }
+
+    function makeToast(type, title, body) {
+      if (!toastStack) {
+        return;
+      }
+
+      const toast = document.createElement("div");
+      toast.className = `notif ${type}`;
+      toast.innerHTML = `
+        <div class="notif-icon">${type === "success" ? "✓" : type === "warning" ? "!" : type === "error" ? "×" : "i"}</div>
+        <div>
+          <strong>${title}</strong>
+          <div class="mini">${body}</div>
+        </div>
+      `;
+
+      toastStack.appendChild(toast);
+
+      toast.addEventListener("click", () => {
+        toast.classList.add("fading");
+        if (toast === activeToast) {
+          clearToastTimers();
+          window.setTimeout(() => {
+            if (toast.parentElement) {
+              toast.remove();
+            }
+            activeToast = null;
+            processToastQueue();
+          }, 220);
+          return;
+        }
+        window.setTimeout(() => {
+          if (toast.parentElement) {
+            toast.remove();
+          }
+        }, 220);
+      });
+
+      processToastQueue();
+    }
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.view;
+        buttons.forEach((item) => item.classList.toggle("active", item === button));
+        panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== target));
+      });
+    });
+
+    if (menu && menuToggle) {
+      menuToggle.addEventListener("click", () => {
+        const isOpen = menu.classList.toggle("open");
+        menuToggle.setAttribute("aria-expanded", String(isOpen));
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!menu.contains(event.target)) {
+          menu.classList.remove("open");
+          menuToggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
+    detailTriggers.forEach((trigger) => {
+      trigger.addEventListener("click", () => {
+        if (!detailDrawer || !detailTitle || !detailBody) {
+          return;
+        }
+
+        detailTitle.textContent = trigger.dataset.detailTitle || "Detail";
+        detailBody.textContent = trigger.dataset.detailBody || "";
+        detailDrawer.classList.add("open");
+      });
+    });
+
+    if (detailClose && detailDrawer) {
+      detailClose.addEventListener("click", () => {
+        detailDrawer.classList.remove("open");
+      });
+    }
+
+    if (toastButtons.info) {
+      toastButtons.info.addEventListener("click", () => {
+        makeToast("info", "Info", "Observer captured a baseline-aligned health snapshot for the intake plane.");
+      });
+    }
+
+    if (toastButtons.success) {
+      toastButtons.success.addEventListener("click", () => {
+        makeToast("success", "Success", "Self-care log trim completed without consuming the last maintenance slot.");
+      });
+    }
+
+    if (toastButtons.warning) {
+      toastButtons.warning.addEventListener("click", () => {
+        makeToast("warning", "Warning", "triage-agent-02 remains online, but latency drift has crossed the observer warning threshold.");
+      });
+    }
+
+    if (toastButtons.error) {
+      toastButtons.error.addEventListener("click", () => {
+        makeToast("error", "Error", "watch-agent-03 is offline and a restart has been requested but not yet confirmed.");
+      });
+    }
+
+    makeToast("info", "Info", "Observer dashboard initialized with default mode summaries.");
+    makeToast("warning", "Warning", "One pipeline agent is offline and currently awaiting restart confirmation.");
+  </script>
+</body>
+</html>

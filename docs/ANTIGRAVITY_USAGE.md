@@ -16,7 +16,7 @@ spiderweb auth login --provider antigravity
 ```
 
 ### Manual Authentication (Headless/VPS)
-If you are running on a server (Coolify/Docker) and cannot reach `localhost`, follow these steps:
+If you are running on a remote server or behind a proxy and cannot reach `localhost`, follow these steps:
 1.  Run the command above.
 2.  Copy the URL provided and open it in your local browser.
 3.  Complete the login.
@@ -43,9 +43,9 @@ You can change the default model in `~/.spiderweb/config.json` or override it vi
 spiderweb agent -m "Hello" --model claude-opus-4-6-thinking
 ```
 
-## 3. Real-world Usage (Coolify/Docker)
+## 3. Real-world Usage (Remote Host / PaaS)
 
-If you are deploying via Coolify or Docker, follow these steps to test:
+If you are deploying on a remote host or managed platform, follow these steps to test:
 
 1.  **Environment Variables**:
     *   `SPIDERWEB_AGENTS_DEFAULTS_MODEL=gemini-flash`

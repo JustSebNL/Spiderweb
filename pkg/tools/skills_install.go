@@ -48,7 +48,7 @@ func (t *InstallSkillTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"slug": map[string]any{
 				"type":        "string",
-				"description": "The unique slug of the skill to install (e.g., 'github', 'docker-compose')",
+				"description": "The unique slug of the skill to install (e.g., 'github', 'weather')",
 			},
 			"version": map[string]any{
 				"type":        "string",

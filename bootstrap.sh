@@ -18,7 +18,8 @@ fi
 SPIDERWEB_DIR="${SPIDERWEB_DIR:-$HOME/spiderweb}"
 INSTALL_PREFIX="${INSTALL_PREFIX:-$HOME/.local}"
 TRIGGER_DIR="${TRIGGER_DIR:-$SPIDERWEB_DIR/trigger}"
-YOUTU_DIR="${YOUTU_DIR:-$SPIDERWEB_DIR/youtu-llm}"
+BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$SPIDERWEB_DIR/brain}}"
+YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 YOUTU_MODEL_REPO="${YOUTU_MODEL_REPO:-tencent/Youtu-LLM-2B}"
 YOUTU_GGUF_REPO="${YOUTU_GGUF_REPO:-tencent/Youtu-LLM-2B-GGUF}"
 YOUTU_GGUF_FILE="${YOUTU_GGUF_FILE:-Youtu-LLM-2B-Q8_0.gguf}"
@@ -61,6 +62,9 @@ if [ -f "$BOOTSTRAP_STATE_FILE" ]; then
   # shellcheck source=/dev/null
   . "$BOOTSTRAP_STATE_FILE"
 fi
+
+BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$SPIDERWEB_DIR/brain}}"
+YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 
 usage() {
   cat <<'EOF'
@@ -180,6 +184,7 @@ save_bootstrap_state() {
     printf 'SPIDERWEB_HOME_DIR=%q\n' "$SPIDERWEB_HOME_DIR"
     printf 'INSTALL_PREFIX=%q\n' "$INSTALL_PREFIX"
     printf 'TRIGGER_DIR=%q\n' "$TRIGGER_DIR"
+    printf 'BRAIN_DIR=%q\n' "$BRAIN_DIR"
     printf 'YOUTU_DIR=%q\n' "$YOUTU_DIR"
     printf 'YOUTU_MODEL_REPO=%q\n' "$YOUTU_MODEL_REPO"
     printf 'YOUTU_GGUF_REPO=%q\n' "$YOUTU_GGUF_REPO"

@@ -88,7 +88,7 @@ The model should:
 - reuse those weights on restart
 
 This is why the current blueprint uses a persistent local cache path such as:
-- host/runtime path: `youtu-llm/model-cache`
+- host/runtime path: `brain/model-cache`
 
 ### 3. The Youtu integration is not fully complete yet
 

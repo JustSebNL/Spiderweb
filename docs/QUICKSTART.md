@@ -29,7 +29,7 @@ What bootstrap does:
 - installs prerequisites
 - installs `git-lfs`
 - installs Spiderweb core
-- prepares `youtu-llm/`
+- prepares `brain/`
 - chooses `vllm` or `llama.cpp`
 - downloads the matching Youtu model
 - writes runtime settings to `~/.spiderweb/runtime.env`

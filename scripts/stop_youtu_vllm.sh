@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-YOUTU_DIR="${YOUTU_DIR:-$REPO_DIR/youtu-llm}"
+BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$REPO_DIR/brain}}"
+YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 YOUTU_VLLM_PID_FILE="${YOUTU_VLLM_PID_FILE:-$YOUTU_DIR/youtu-vllm.pid}"
 
 if [ ! -f "$YOUTU_VLLM_PID_FILE" ]; then

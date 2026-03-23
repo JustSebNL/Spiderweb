@@ -29,7 +29,7 @@ export const ensureYoutuVllm = task({
   run: async () => {
     const repoRoot = path.resolve(process.cwd(), "..");
     const startScript = path.join(repoRoot, "scripts", "start_youtu_vllm.sh");
-    const youtuDir = process.env.YOUTU_DIR ?? path.join(repoRoot, "youtu-llm");
+    const youtuDir = process.env.BRAIN_DIR ?? process.env.YOUTU_DIR ?? path.join(repoRoot, "brain");
     const cacheDir = process.env.YOUTU_CACHE_DIR ?? path.join(youtuDir, "model-cache");
     const venvDir = process.env.YOUTU_VLLM_VENV ?? path.join(youtuDir, ".venv-vllm");
     const port = process.env.YOUTU_VLLM_PORT ?? "8000";
@@ -40,6 +40,7 @@ export const ensureYoutuVllm = task({
       const env = {
         ...process.env,
         HF_TOKEN: requiredEnv("HF_TOKEN"),
+        BRAIN_DIR: youtuDir,
         YOUTU_DIR: youtuDir,
         YOUTU_CACHE_DIR: cacheDir,
         YOUTU_VLLM_VENV: venvDir,

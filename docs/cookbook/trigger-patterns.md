@@ -13,23 +13,27 @@ Example use:
 
 ```ts
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 import { task } from "@trigger.dev/sdk";
 
 const execFileAsync = promisify(execFile);
 
-async function docker(args: string[]) {
-  return execFileAsync("docker", args, { env: process.env });
-}
-
 export const ensureService = task({
   id: "ensure-service",
   run: async () => {
-    const inspect = await docker(["inspect", "my-service"]).catch(() => null);
+    const repoRoot = path.resolve(process.cwd(), "..");
+    const startScript = path.join(repoRoot, "scripts", "start_youtu_vllm.sh");
+    const brainDir = process.env.BRAIN_DIR ?? path.join(repoRoot, "brain");
 
-    if (!inspect) {
-      await docker(["run", "-d", "--name", "my-service", "my-image:latest"]);
-    }
+    await execFileAsync("bash", [startScript], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        BRAIN_DIR: brainDir,
+        YOUTU_DIR: process.env.YOUTU_DIR ?? brainDir,
+      },
+    });
 
     const response = await fetch("http://127.0.0.1:8000/health");
     if (!response.ok) {

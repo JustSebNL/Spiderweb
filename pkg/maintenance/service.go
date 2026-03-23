@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -242,7 +243,7 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 
 	switch runtime {
 	case "vllm":
-		pidFile := envOrDefault("YOUTU_VLLM_PID_FILE", filepath.Join(envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "youtu-llm")), "youtu-vllm.pid"))
+		pidFile := envOrDefault("YOUTU_VLLM_PID_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "youtu-vllm.pid"))
 		state.PIDFile = pidFile
 		state.Running = pidAlive(pidFile)
 		if !state.Running {
@@ -256,6 +257,8 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 			if s.cfg.AutoRemediate && s.cfg.RestartOnProcessDeath && s.youtuCtl != nil && !deferMaintenance && hasBudget(cleanupBudget) {
 				if backedOff, reason := s.restartBackoffActive(previous); backedOff {
 					notes = append(notes, reason)
+				} else if !consumeBudget(cleanupBudget) {
+					notes = append(notes, "Maintenance budget exhausted before requesting vLLM restart")
 				} else if err := s.youtuCtl.Start(); err != nil {
 					state.Action = "restart_failed"
 					state.Message = err.Error()
@@ -276,12 +279,12 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 			}
 		}
 		if !deferMaintenance {
-			if trimmed, ok := trimLogIfNeeded(envOrDefault("YOUTU_VLLM_LOG_FILE", filepath.Join(envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "youtu-llm")), "youtu-vllm.log")), s.cfg.MaxLogMB, cleanupBudget); ok {
+			if trimmed, ok := trimLogIfNeeded(envOrDefault("YOUTU_VLLM_LOG_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "youtu-vllm.log")), s.cfg.MaxLogMB, cleanupBudget); ok {
 				notes = append(notes, trimmed)
 			}
 		}
 	case "llama_cpp":
-		pidFile := filepath.Join(envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "youtu-llm")), "llama-server.pid")
+		pidFile := filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "llama-server.pid")
 		state.PIDFile = pidFile
 		state.Running = pidAlive(pidFile)
 		if !state.Running {
@@ -294,7 +297,7 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 			}
 		}
 		if !deferMaintenance {
-			if trimmed, ok := trimLogIfNeeded(filepath.Join(envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "youtu-llm")), "llama-server.log"), s.cfg.MaxLogMB, cleanupBudget); ok {
+			if trimmed, ok := trimLogIfNeeded(filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "llama-server.log"), s.cfg.MaxLogMB, cleanupBudget); ok {
 				notes = append(notes, trimmed)
 			}
 		}
@@ -331,6 +334,8 @@ func (s *Service) inspectTriggerProcess(deferMaintenance bool, previous *HealthS
 		if s.cfg.AutoRemediate && s.cfg.RestartOnProcessDeath && s.triggerCtl != nil && s.triggerCfg.AutoStart && !deferMaintenance && hasBudget(cleanupBudget) {
 			if backedOff, reason := s.restartBackoffActive(previous); backedOff {
 				notes = append(notes, reason)
+			} else if !consumeBudget(cleanupBudget) {
+				notes = append(notes, "Maintenance budget exhausted before requesting Trigger restart")
 			} else if err := s.triggerCtl.Start(); err != nil {
 				state.Action = "restart_failed"
 				state.Message = err.Error()
@@ -627,7 +632,11 @@ func pidAlive(pidFile string) bool {
 	if pid == "" {
 		return false
 	}
-	proc, err := os.FindProcess(parsePID(pid))
+	parsedPID, ok := parsePID(pid)
+	if !ok {
+		return false
+	}
+	proc, err := os.FindProcess(parsedPID)
 	if err != nil {
 		return false
 	}
@@ -637,10 +646,12 @@ func pidAlive(pidFile string) bool {
 	return proc.Signal(syscall.Signal(0)) == nil
 }
 
-func parsePID(value string) int {
-	var pid int
-	fmt.Sscanf(value, "%d", &pid)
-	return pid
+func parsePID(value string) (int, bool) {
+	pid, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
 }
 
 func expandHome(path string) string {

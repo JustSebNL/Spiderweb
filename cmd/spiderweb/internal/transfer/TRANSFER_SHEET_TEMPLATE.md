@@ -149,7 +149,7 @@ Fill rule: if any field is unknown, write `UNKNOWN` (do not leave blank).
 
 - **Environment variables required:** `<list>`
 - **Secrets required (do not paste values):** `<names only>`
-- **External tooling required:** `<git-lfs, docker, cli tools, etc>`
+- **External tooling required:** `<git-lfs, tmux, cli tools, etc>`
 - **Where configuration lives:** `<path>`
 
 ## 13) Collaboration Log (Must Be Used)

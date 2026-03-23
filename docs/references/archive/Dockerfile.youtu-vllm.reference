@@ -1,0 +1,23 @@
+FROM vllm/vllm-openai:v0.10.2
+
+# Youtu-LLM requires model-specific vLLM integration files according to the
+# upstream model card. These files are not included in this repository yet.
+# Place the required patched files under infra/vllm/patches/ before building.
+COPY infra/vllm/patches/youtu_llm.py /usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/youtu_llm.py
+COPY infra/vllm/patches/configuration_youtu.py /usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/configuration_youtu.py
+COPY infra/vllm/patches/registry.py /usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/registry.py
+COPY infra/vllm/patches/__init__.py /usr/local/lib/python3.12/dist-packages/vllm/config/__init__.py
+
+ENV HF_HOME=/models
+ENV TRANSFORMERS_CACHE=/models
+
+EXPOSE 8000
+
+CMD [
+  "--model", "tencent/Youtu-LLM-2B",
+  "--trust-remote-code",
+  "--host", "0.0.0.0",
+  "--port", "8000",
+  "--max-model-len", "32768",
+  "--gpu-memory-utilization", "0.85"
+]

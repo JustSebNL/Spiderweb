@@ -1,0 +1,46 @@
+services:
+  # ─────────────────────────────────────────────
+  # Spiderweb Agent (one-shot query)
+  #   docker compose run --rm spiderweb-agent -m "Hello"
+  # ─────────────────────────────────────────────
+  spiderweb-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spiderweb-agent
+    profiles:
+      - agent
+    # Uncomment to access host network; leave commented unless needed.
+    #extra_hosts:
+    #  - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config/config.json:/home/spiderweb/.spiderweb/config.json:ro
+      - spiderweb-workspace:/home/spiderweb/.spiderweb/workspace
+    entrypoint: ["spiderweb", "agent"]
+    stdin_open: true
+    tty: true
+
+  # ─────────────────────────────────────────────
+  # Spiderweb Gateway (Long-running Bot)
+  #   docker compose up spiderweb-gateway
+  # ─────────────────────────────────────────────
+  spiderweb-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spiderweb-gateway
+    restart: unless-stopped
+    profiles:
+      - gateway
+    # Uncomment to access host network; leave commented unless needed.
+    #extra_hosts:
+    #  - "host.docker.internal:host-gateway"
+    volumes:
+      # Configuration file
+      - ./config/config.json:/home/spiderweb/.spiderweb/config.json:ro
+      # Persistent workspace (sessions, memory, logs)
+      - spiderweb-workspace:/home/spiderweb/.spiderweb/workspace
+    command: ["gateway"]
+
+volumes:
+  spiderweb-workspace:

@@ -1,0 +1,10 @@
+FROM alpine:3.21
+
+ARG TARGETPLATFORM
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY $TARGETPLATFORM/sweb /usr/local/bin/sweb
+
+ENTRYPOINT ["sweb"]
+CMD ["gateway"]

@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/JustSebNL/Spiderweb/pkg/config"
+	"github.com/JustSebNL/Spiderweb/pkg/systemdb"
 )
 
 type fakeRuntimeStats struct {
@@ -22,11 +24,26 @@ func (f fakeRuntimeStats) CheapCognitionSnapshot() CheapCognitionSnapshot {
 type fakeRuntimeController struct {
 	startCalls int
 	startErr   error
+	mu         sync.Mutex
+	blockCh    chan struct{}
 }
 
 func (f *fakeRuntimeController) Start() error {
+	f.mu.Lock()
 	f.startCalls++
-	return f.startErr
+	blockCh := f.blockCh
+	startErr := f.startErr
+	f.mu.Unlock()
+	if blockCh != nil {
+		<-blockCh
+	}
+	return startErr
+}
+
+func (f *fakeRuntimeController) Calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.startCalls
 }
 
 func TestMaintenance_ShouldDeferMaintenanceWhenRecentlyActive(t *testing.T) {
@@ -55,13 +72,19 @@ func TestMaintenance_ShouldDeferMaintenanceWhenRecentlyActive(t *testing.T) {
 	t.Logf("recent decision at: %s", recent.LastDecisionAt.Format(time.RFC3339))
 	t.Logf("old decision at: %s", old.LastDecisionAt.Format(time.RFC3339))
 
-	if !svc.shouldDeferMaintenance(recent, false) {
+	deferred, reason := svc.shouldDeferMaintenance(recent, nil, false)
+	if !deferred {
 		t.Fatalf("expected maintenance to defer for recent activity")
 	}
-	if svc.shouldDeferMaintenance(old, false) {
+	if !strings.Contains(reason, "recently active") {
+		t.Fatalf("expected recent activity reason, got %q", reason)
+	}
+	deferred, _ = svc.shouldDeferMaintenance(old, nil, false)
+	if deferred {
 		t.Fatalf("expected maintenance to continue for older activity")
 	}
-	if svc.shouldDeferMaintenance(recent, true) {
+	deferred, _ = svc.shouldDeferMaintenance(recent, nil, true)
+	if deferred {
 		t.Fatalf("baseline probe should not be deferred")
 	}
 }
@@ -177,7 +200,7 @@ func TestMaintenance_CollectSnapshot_DefersAndSkipsRestartWhenBusy(t *testing.T)
 
 	workspace := t.TempDir()
 	triggerCtl := &fakeRuntimeController{}
-	youtuCtl := &fakeRuntimeController{}
+	brainCtl := &fakeRuntimeController{}
 
 	stats := fakeRuntimeStats{
 		snapshot: CheapCognitionSnapshot{
@@ -212,7 +235,7 @@ func TestMaintenance_CollectSnapshot_DefersAndSkipsRestartWhenBusy(t *testing.T)
 		},
 		stats,
 		triggerCtl,
-		youtuCtl,
+		brainCtl,
 	)
 
 	snapshot := svc.collectSnapshot(context.Background(), nil, nil, false)
@@ -220,6 +243,9 @@ func TestMaintenance_CollectSnapshot_DefersAndSkipsRestartWhenBusy(t *testing.T)
 
 	if !snapshot.Deferred {
 		t.Fatalf("expected snapshot to defer maintenance during recent activity")
+	}
+	if !strings.Contains(snapshot.DeferReason, "recently active") {
+		t.Fatalf("expected recent activity defer reason, got %q", snapshot.DeferReason)
 	}
 	if triggerCtl.startCalls != 0 {
 		t.Fatalf("expected trigger restart to be skipped during defer window, got %d calls", triggerCtl.startCalls)
@@ -278,5 +304,167 @@ func TestMaintenance_CollectSnapshot_RestartConsumesBudget(t *testing.T) {
 	}
 	if strings.HasPrefix(string(data), "[trimmed by Spiderweb maintenance]\n") {
 		t.Fatalf("expected log trim to be skipped after restart consumed the budget")
+	}
+}
+
+func TestMaintenance_RunOnce_WritesSystemDB(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	healthFile := filepath.Join(workspace, "runtime-health.json")
+
+	svc := NewService(
+		workspace,
+		config.MaintenanceConfig{
+			Enabled:               true,
+			HealthFile:            healthFile,
+			AutoRemediate:         false,
+			BudgetPercent:         5,
+			RestartBackoffMinutes: 30,
+		},
+		config.CheapCognitionConfig{
+			Enabled: false,
+		},
+		config.TriggerConfig{
+			Enabled: false,
+		},
+		fakeRuntimeStats{},
+		nil,
+		nil,
+	)
+
+	svc.RunOnce(context.Background())
+
+	store, err := systemdb.Open(filepath.Join(workspace, "system.db"))
+	if err != nil {
+		t.Fatalf("open system db: %v", err)
+	}
+	defer store.Close()
+
+	stats, err := store.Stats24h()
+	if err != nil {
+		t.Fatalf("stats24h: %v", err)
+	}
+	if stats.TotalEvents == 0 {
+		t.Fatalf("expected maintenance run to emit at least one observer event")
+	}
+}
+
+func TestMaintenance_StopPreventsDelayedStartupRun(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	healthFile := filepath.Join(workspace, "runtime-health.json")
+
+	svc := NewService(
+		workspace,
+		config.MaintenanceConfig{
+			Enabled:    true,
+			HealthFile: healthFile,
+		},
+		config.CheapCognitionConfig{},
+		config.TriggerConfig{},
+		fakeRuntimeStats{},
+		nil,
+		nil,
+	)
+	svc.startupDelay = 20 * time.Millisecond
+
+	if err := svc.Start(); err != nil {
+		t.Fatalf("start service: %v", err)
+	}
+	svc.Stop()
+
+	time.Sleep(60 * time.Millisecond)
+	if _, err := os.Stat(healthFile); !os.IsNotExist(err) {
+		t.Fatalf("expected no startup health file after stop, stat err=%v", err)
+	}
+}
+
+func TestMaintenance_RunOnceSkipsOverlap(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	triggerCtl := &fakeRuntimeController{blockCh: make(chan struct{})}
+
+	svc := NewService(
+		workspace,
+		config.MaintenanceConfig{
+			Enabled:               true,
+			AutoRemediate:         true,
+			RestartOnProcessDeath: true,
+			BudgetPercent:         5,
+			MaxLogMB:              1,
+		},
+		config.CheapCognitionConfig{},
+		config.TriggerConfig{
+			Enabled:   true,
+			AutoStart: true,
+			Workdir:   filepath.Join(workspace, "trigger"),
+			PIDFile:   filepath.Join(workspace, "trigger.pid"),
+			LogFile:   filepath.Join(workspace, "trigger.log"),
+		},
+		fakeRuntimeStats{},
+		triggerCtl,
+		nil,
+	)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		svc.RunOnce(context.Background())
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	svc.RunOnce(context.Background())
+
+	if calls := triggerCtl.Calls(); calls != 1 {
+		t.Fatalf("expected only one overlapping restart attempt, got %d", calls)
+	}
+
+	close(triggerCtl.blockCh)
+	<-done
+}
+
+func TestMaintenance_ShouldDeferMaintenanceWhenSustainedLoadDetected(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(
+		t.TempDir(),
+		config.MaintenanceConfig{
+			Enabled:           true,
+			BusyWindowMinutes: 10,
+			MaxCheapFailures:  3,
+		},
+		config.CheapCognitionConfig{},
+		config.TriggerConfig{},
+		nil,
+		nil,
+		nil,
+	)
+
+	previous := &HealthSnapshot{
+		Timestamp: time.Now().Add(-5 * time.Minute),
+		CheapCognition: CheapCognitionSnapshot{
+			ClassificationCalls: 10,
+			Forwarded:           5,
+			Skipped:             2,
+			ClassificationFails: 0,
+		},
+	}
+	current := CheapCognitionSnapshot{
+		ClassificationCalls: 28,
+		Forwarded:           14,
+		Skipped:             6,
+		ClassificationFails: 0,
+		LastDecisionAt:      time.Now().Add(-20 * time.Minute),
+	}
+
+	deferred, reason := svc.shouldDeferMaintenance(current, previous, false)
+	if !deferred {
+		t.Fatalf("expected maintenance to defer for sustained recent load")
+	}
+	if !strings.Contains(reason, "sustained recent load") {
+		t.Fatalf("expected sustained load reason, got %q", reason)
 	}
 }

@@ -51,10 +51,12 @@ func gatewayCmd(debug bool) error {
 	}
 	triggerCtl := servicectl.NewTriggerController(repoRoot, cfg.Trigger)
 	if err := triggerCtl.Start(); err != nil {
-		return fmt.Errorf("error starting trigger worker: %w", err)
+		logger.WarnCF("gateway", "Trigger worker start failed; continuing without Trigger", map[string]any{
+			"error": err.Error(),
+		})
 	}
-	youtuCtl := servicectl.NewYoutuController(repoRoot, cfg.Intake.CheapCognition)
-	if err := youtuCtl.Start(); err != nil {
+	brainCtl := servicectl.NewBrainController(repoRoot, cfg.Intake.CheapCognition)
+	if err := brainCtl.Start(); err != nil {
 		return fmt.Errorf("error starting cheap cognition runtime: %w", err)
 	}
 
@@ -206,7 +208,31 @@ func gatewayCmd(debug bool) error {
 	healthServer := health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port)
 	healthServer.SetMessageBus(msgBus)
 	healthServer.SetWorkspace(cfg.WorkspacePath())
-
+	healthServer.SetObserverHealthFile(resolveMaintenanceHealthFile(cfg.WorkspacePath(), cfg.Maintenance.HealthFile))
+	healthServer.SetObserverRestartFunc(func(ctx context.Context, service string) (map[string]any, error) {
+		switch strings.ToLower(strings.TrimSpace(service)) {
+		case "trigger":
+			if err := triggerCtl.Restart(); err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"ok":      true,
+				"action":  "restart",
+				"message": "Trigger worker restart requested",
+			}, nil
+		case "brain", "brain-vllm", "cheap_cognition_vllm":
+			if err := brainCtl.Restart(); err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"ok":      true,
+				"action":  "restart",
+				"message": "Brain runtime restart requested",
+			}, nil
+		default:
+			return nil, fmt.Errorf("unsupported restart target: %s", service)
+		}
+	})
 	// Register OpenClaw WebSocket bridge if enabled
 	if openclawCh, ok := channelManager.GetChannel("openclaw"); ok {
 		if oc, ok := openclawCh.(*channels.OpenClawChannel); ok {
@@ -252,8 +278,16 @@ func gatewayCmd(debug bool) error {
 		cfg.Trigger,
 		agentLoop,
 		triggerCtl,
-		youtuCtl,
+		brainCtl,
 	)
+	healthServer.SetObserverSelfCareFunc(func(ctx context.Context) (map[string]any, error) {
+		maintenanceService.RunOnce(ctx)
+		return map[string]any{
+			"ok":      true,
+			"action":  "self_care_run",
+			"message": "Self-care run requested",
+		}, nil
+	})
 	if err := maintenanceService.Start(); err != nil {
 		fmt.Printf("Error starting maintenance service: %v\n", err)
 	} else if cfg.Maintenance.Enabled {
@@ -273,7 +307,7 @@ func gatewayCmd(debug bool) error {
 	cancel()
 	healthServer.Stop(context.Background())
 	maintenanceService.Stop()
-	if err := youtuCtl.Stop(); err != nil {
+	if err := brainCtl.Stop(); err != nil {
 		fmt.Printf("Error stopping cheap cognition runtime: %v\n", err)
 	}
 	if err := triggerCtl.Stop(); err != nil {
@@ -287,6 +321,31 @@ func gatewayCmd(debug bool) error {
 	fmt.Println("✓ Gateway stopped")
 
 	return nil
+}
+
+func resolveMaintenanceHealthFile(workspace, healthFile string) string {
+	healthFile = strings.TrimSpace(healthFile)
+	if healthFile != "" {
+		return expandHome(healthFile)
+	}
+	return filepath.Join(workspace, "state", "runtime-health.json")
+}
+
+func expandHome(path string) string {
+	if path == "" {
+		return path
+	}
+	if path[0] == '~' {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		if len(path) > 1 && path[1] == '/' {
+			return home + path[1:]
+		}
+		return home
+	}
+	return path
 }
 
 func setupCronTool(

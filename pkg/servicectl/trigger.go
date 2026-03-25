@@ -26,6 +26,9 @@ func (c *TriggerController) Start() error {
 	}
 
 	workdir := c.resolveWorkdir()
+	if workdir == "" {
+		return nil
+	}
 	pidFile := c.resolvePIDFile(workdir)
 	logFile := c.resolveLogFile(workdir)
 
@@ -51,7 +54,7 @@ func (c *TriggerController) Start() error {
 }
 
 func (c *TriggerController) Stop() error {
-	if c == nil || !c.started {
+	if c == nil || !c.cfg.Enabled {
 		return nil
 	}
 
@@ -70,16 +73,33 @@ func (c *TriggerController) Stop() error {
 	return nil
 }
 
+func (c *TriggerController) Restart() error {
+	if c == nil {
+		return nil
+	}
+	if err := c.Stop(); err != nil {
+		return err
+	}
+	return c.Start()
+}
+
 func (c *TriggerController) resolveWorkdir() string {
 	if c == nil {
 		return ""
 	}
 	if workdir := expandHome(c.cfg.Workdir); workdir != "" {
-		if _, err := os.Stat(workdir); err == nil {
+		if stat, err := os.Stat(workdir); err == nil && stat.IsDir() {
 			return workdir
 		}
+		return ""
 	}
-	return filepath.Join(c.repoRoot, "trigger")
+	fallback := filepath.Join(c.repoRoot, "trigger")
+	if stat, err := os.Stat(fallback); err == nil && stat.IsDir() {
+		if _, err := os.Stat(filepath.Join(fallback, "package.json")); err == nil {
+			return fallback
+		}
+	}
+	return ""
 }
 
 func (c *TriggerController) resolvePIDFile(workdir string) string {

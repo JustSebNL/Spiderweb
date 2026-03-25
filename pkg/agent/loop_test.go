@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JustSebNL/Spiderweb/pkg/agentdb"
 	"github.com/JustSebNL/Spiderweb/pkg/bus"
 	"github.com/JustSebNL/Spiderweb/pkg/config"
 	"github.com/JustSebNL/Spiderweb/pkg/providers"
@@ -216,6 +217,54 @@ func TestToolContext_Updates(t *testing.T) {
 
 	// Verify the tool implements the interface correctly
 	var _ tools.ContextualTool = ctxTool
+}
+
+func TestAgentLoop_RecordsAgentPresence(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	healthFile := filepath.Join(tmpDir, "runtime-health.json")
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+		Maintenance: config.MaintenanceConfig{
+			HealthFile: healthFile,
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &simpleMockProvider{response: "OK"}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	if _, err := al.ProcessDirectWithChannel(context.Background(), "check alert queue", "agent:default", "slack", "alerts-room"); err != nil {
+		t.Fatalf("ProcessDirectWithChannel failed: %v", err)
+	}
+
+	store, err := agentdb.Open(filepath.Join(tmpDir, "agent.db"))
+	if err != nil {
+		t.Fatalf("open agent db: %v", err)
+	}
+	defer store.Close()
+
+	agents, err := store.CurrentAgents()
+	if err != nil {
+		t.Fatalf("current agents: %v", err)
+	}
+	if len(agents) == 0 {
+		t.Fatalf("expected at least one agent presence record")
+	}
+	if agents[0].Channel != "slack" || agents[0].ChatID != "alerts-room" {
+		t.Fatalf("unexpected agent presence record: %+v", agents[0])
+	}
 }
 
 // TestToolRegistry_GetDefinitions verifies tool definitions can be retrieved

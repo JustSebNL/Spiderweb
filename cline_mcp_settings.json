@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "github.com/mem0ai/mem0-mcp": {
+      "command": "uvx",
+      "args": ["mem0-mcp-server"],
+      "env": {
+        "MEM0_API_KEY": "m0-0xLDfdxN95i6xTzRbi1kqCxW32n4V1g5r9Oi8zwe",
+        "MEM0_DEFAULT_USER_ID": "Trae"
+      }
+    },
+    "github.com/taskade/mcp": {
+      "command": "npx",
+      "args": ["-y", "@taskade/mcp-server"],
+      "env": {
+        "TASKADE_API_KEY": "tskdp_bBtDr5W9vdr89wDEjcjDbyvrGUmz4oxMMU"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

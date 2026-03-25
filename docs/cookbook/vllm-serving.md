@@ -17,6 +17,13 @@ Required behavior:
 - first start downloads from Hugging Face
 - weights land in a persistent mounted cache
 - later restarts reuse the cache
+- native `vLLM` path only proceeds when the required Youtu integration files exist under `infra/vllm/patches/`
+
+Required local patch files:
+- `infra/vllm/patches/youtu_llm.py`
+- `infra/vllm/patches/configuration_youtu.py`
+- `infra/vllm/patches/registry.py`
+- `infra/vllm/patches/__init__.py`
 
 Example run shape:
 
@@ -35,7 +42,7 @@ nohup /opt/spiderweb/brain/.venv-vllm/bin/python -m vllm.entrypoints.openai.api_
   --port 8000 \
   --max-model-len 32768 \
   --gpu-memory-utilization 0.85 \
-  > /opt/spiderweb/brain/youtu-vllm.log 2>&1 &
+  > /opt/spiderweb/brain/brain-vllm.log 2>&1 &
 ```
 
 ## Why weights must not be baked into the runtime bundle

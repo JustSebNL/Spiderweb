@@ -74,6 +74,10 @@ Useful runtime files for daily inspection:
 - `~/.spiderweb/runtime.env`
 - `~/.spiderweb/runtime-health.json`
 - `~/.spiderweb/runtime-health.json.baseline`
+- `brain/brain-vllm.pid`
+- `brain/brain-vllm.log`
+- `brain/llama-server.pid`
+- `brain/llama-server.log`
 
 ## Debug Use
 
@@ -89,12 +93,34 @@ Current observer reads are available through:
 
 ```bash
 curl http://127.0.0.1:8080/observer/overview
+curl http://127.0.0.1:8080/observer/dashboard
 curl http://127.0.0.1:8080/observer/services
+curl http://127.0.0.1:8080/observer/agents
+curl http://127.0.0.1:8080/observer/stats/24h
 ```
 
-Longer-term observer debug mode is part of the control-plane design, but the full dashboard/debug surface is not fully implemented yet.
+Current operator actions also available now:
+
+```bash
+curl -X POST http://127.0.0.1:8080/observer/actions/self-care/run
+curl -X POST http://127.0.0.1:8080/observer/reports/generate
+curl -X POST http://127.0.0.1:8080/observer/journal/generate
+curl http://127.0.0.1:8080/observer/reports/latest
+curl http://127.0.0.1:8080/observer/journal/latest
+```
+
+Interactive operator UI:
+- [../../ui/dashboard/observer.html](../../ui/dashboard/observer.html)
+
+Current dashboard/debug state:
+- the dashboard now has a functioning live operator surface
+- default and debug views both work
+- debug mode uses richer event/task context rather than only changing cadence
+- some panels still retain bounded fallback behavior when observer endpoints are unavailable
 
 ## Related Docs
+- [Brain Runtime Operations](./brain-runtime-operations.md)
+- [Dashboard And Operator Usage](./dashboard-and-operator-usage.md)
 - [Observer And Self-Care](./observer-and-self-care.md)
 - [../COMMANDS.md](../COMMANDS.md)
 - [../QUICKSTART.md](../QUICKSTART.md)

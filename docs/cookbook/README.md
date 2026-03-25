@@ -23,5 +23,10 @@ Do not use it for:
 - `failure-handling.md`
 - `handoff-packets.md`
 
+## Current high-value recipes
+- `connector-patterns.md`: how a source should emit Spiderweb-compatible intake messages
+- `routing-patterns.md`: current forward allow/deny controls and cheap-cognition routing effects
+- `failure-handling.md`: degraded-mode contracts for cheap-cognition failure and OpenClaw unavailability
+
 ## Rule of use
 If a pattern is likely to be needed again, save it here once instead of rediscovering it later.

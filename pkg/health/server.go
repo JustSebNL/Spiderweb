@@ -19,18 +19,21 @@ import (
 )
 
 type Server struct {
-	server    *http.Server
-	mu        sync.RWMutex
-	ready     bool
-	checks    map[string]Check
-	startTime time.Time
-	msgBus    *bus.MessageBus
-	workspace string
-	nextID    uint64
-	offers    map[uint64]offerEntry
-	receipts  map[uint64]time.Time
-	chats     map[string]chatEntry
-	wsHandler map[string]http.Handler
+	server     *http.Server
+	mu         sync.RWMutex
+	ready      bool
+	checks     map[string]Check
+	startTime  time.Time
+	msgBus     *bus.MessageBus
+	workspace  string
+	healthFile string
+	nextID     uint64
+	offers     map[uint64]offerEntry
+	receipts   map[uint64]time.Time
+	chats      map[string]chatEntry
+	wsHandler  map[string]http.Handler
+	restartFn  func(context.Context, string) (map[string]any, error)
+	selfCareFn func(context.Context) (map[string]any, error)
 }
 
 type offerEntry struct {
@@ -133,8 +136,24 @@ func NewServer(host string, port int) *Server {
 	mux.HandleFunc("/valve/handshake/confirm", s.valveHandshakeConfirmHandler)
 	mux.HandleFunc("/intake/stats", s.intakeStatsHandler)
 	mux.HandleFunc("/observer/overview", s.observerOverviewHandler)
+	mux.HandleFunc("/observer/dashboard", s.observerDashboardHandler)
 	mux.HandleFunc("/observer/benchmarks", s.observerBenchmarksHandler)
 	mux.HandleFunc("/observer/services", s.observerServicesHandler)
+	mux.HandleFunc("/observer/agents", s.observerAgentsHandler)
+	mux.HandleFunc("/observer/agents/summary", s.observerAgentsSummaryHandler)
+	mux.HandleFunc("/observer/events", s.observerEventsHandler)
+	mux.HandleFunc("/observer/self-care/cycles", s.observerSelfCareCyclesHandler)
+	mux.HandleFunc("/observer/stats/24h", s.observerStats24hHandler)
+	mux.HandleFunc("/observer/actions/restart", s.observerRestartHandler)
+	mux.HandleFunc("/observer/actions/self-care/run", s.observerSelfCareRunHandler)
+	mux.HandleFunc("/observer/journal/generate", s.observerJournalGenerateHandler)
+	mux.HandleFunc("/observer/journal/latest", s.observerJournalLatestHandler)
+	mux.HandleFunc("/observer/reports/generate", s.observerGenerateReportHandler)
+	mux.HandleFunc("/observer/reports/latest", s.observerLatestReportHandler)
+	mux.HandleFunc("/observer/actions/clear-events", s.observerClearEventsHandler)
+	mux.HandleFunc("/observer/actions/reset-baseline", s.observerResetBaselineHandler)
+	mux.HandleFunc("/observer/config", s.observerConfigHandler)
+	mux.HandleFunc("/observer/config/journal", s.observerJournalConfigHandler)
 	mux.HandleFunc("/transfer/chat/start", s.transferChatStartHandler)
 	mux.HandleFunc("/transfer/chat/send", s.transferChatSendHandler)
 	mux.HandleFunc("/transfer/chat/tail", s.transferChatTailHandler)
@@ -179,6 +198,24 @@ func (s *Server) SetWorkspace(workspace string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.workspace = workspace
+}
+
+func (s *Server) SetObserverHealthFile(healthFile string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.healthFile = healthFile
+}
+
+func (s *Server) SetObserverRestartFunc(fn func(context.Context, string) (map[string]any, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.restartFn = fn
+}
+
+func (s *Server) SetObserverSelfCareFunc(fn func(context.Context) (map[string]any, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.selfCareFn = fn
 }
 
 // RegisterWSHandler registers a WebSocket handler at the given path prefix.

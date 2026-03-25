@@ -1,9 +1,9 @@
 # Observer Control Plane Design
 
-This document defines the next runtime architecture for Spiderweb's observer, self-care, logging, and dashboard layers.
+This document defines the next runtime architecture for Spiderweb's observer, self-care, logging, dashboard layers, and the surrounding orchestration/sandbox split.
 
 It is the written implementation companion to:
-- [observer-control-plane.html](./observer-control-plane.html)
+- [../../ui/dashboard/observer.html](../../ui/dashboard/observer.html)
 - [../TECHNICAL_GUIDE.md](../TECHNICAL_GUIDE.md)
 - [../knowledge-base/observer-and-self-care.md](../knowledge-base/observer-and-self-care.md)
 
@@ -23,6 +23,7 @@ What is still missing:
 - a clear split between system-wide logging and agent/pipeline detail
 - a benchmark cycle that preserves baseline, pre-care, and post-care state
 - an architecture that can grow without turning maintenance into an unbounded side brain
+- a clear boundary between long-lived agent orchestration and isolated task execution
 
 ## 2. Design Goals
 
@@ -33,6 +34,8 @@ The redesign should:
 - avoid mixing system logs with detailed agent transcripts
 - create a dashboard/report surface that reads from a single aggregation layer
 - keep the current runtime inspectable and cheap
+- use long-lived orchestration where duration matters
+- use sandboxed execution where isolation matters
 
 ## 3. Runtime Budget Model
 
@@ -55,12 +58,23 @@ Hard caps are still required:
 ## 4. System Shape
 
 ```text
-Core Runtime
-  - gateway
+Local Spiderweb Runtime
+  - sweb gateway
   - cheap cognition runtime
-  - trigger worker(s)
-  - pipeline manager(s)
-  - pipeline agents
+  - observer / self-care
+  - dashboard / health API
+  - system.db / agent.db
+
+Trigger.dev Orchestration Layer
+  - long-lived agent workflows
+  - pipeline manager agents
+  - scheduled journal generation
+  - retries / fan-out / durable workflow coordination
+
+E2B Sandbox Layer
+  - isolated code execution
+  - risky shell / file / process tasks
+  - bounded sandboxed agent sub-tasks
 
 Observer / Control Plane
   - service registry
@@ -80,9 +94,54 @@ Storage
   - agent.db
 ```
 
-## 5. Ownership Boundaries
+## 5. Orchestration And Sandbox Split
 
-### 5.1 Core runtime
+Spiderweb should not force one tool to do two incompatible jobs.
+
+### 5.1 Trigger.dev
+
+Trigger.dev is the preferred home for:
+- long-lived workflow orchestration
+- retries
+- schedules
+- durable background coordination
+- pipeline-manager style agent lifetimes
+
+Reason:
+- continuous runtime matters here more than strict execution isolation
+- agent orchestration should not be constrained by shorter sandbox runtime windows
+
+### 5.2 E2B
+
+E2B is the preferred home for:
+- isolated task execution
+- risky code execution
+- shell/file/process work that benefits from containment
+- bounded sub-tasks launched by orchestrated agents
+
+Reason:
+- sandboxing is the value here
+- continuous service lifetime is not the main need here
+
+### 5.3 Local Spiderweb
+
+Local Spiderweb remains the operator truth surface.
+
+It should own:
+- the observer
+- the dashboard and health API
+- system status and summary persistence
+- OpenClaw bridge visibility
+- local cheap-cognition runtime when kept native
+
+Rule:
+- Trigger.dev should not become the main operator-facing source of truth
+- E2B should not become the permanent home of always-on control-plane services
+- Spiderweb local should not be forced to impersonate a cloud orchestrator
+
+## 6. Ownership Boundaries
+
+### 6.1 Core runtime
 
 Core runtime owns:
 - message handling
@@ -96,19 +155,20 @@ Core runtime does not own:
 - system-wide drift analysis
 - long-term control-plane reporting
 
-### 5.2 Pipeline manager
+### 6.2 Pipeline manager / orchestrated agents
 
 Pipeline manager owns:
 - coordination of X pipeline agents
 - queue depth
 - pipeline-local failures and retries
 - pipeline throughput management
+- sandboxed sub-task dispatch when needed
 
 Pipeline manager does not own:
 - whole-system observer responsibilities
 - cross-service health reporting beyond summarized status
 
-### 5.3 Observer
+### 6.3 Observer
 
 Observer owns:
 - system-wide service state
@@ -123,7 +183,7 @@ Observer does not own:
 - raw transcript logging by default
 - service orchestration beyond bounded self-care requests
 
-### 5.4 Self-care executor
+### 6.4 Self-care executor
 
 Self-care executor owns:
 - bounded checks
@@ -135,11 +195,24 @@ Self-care executor does not own:
 - dashboard rendering
 - pipeline logic
 
-## 6. Storage Split
+### 6.5 E2B task runners
+
+E2B task runners own:
+- isolated execution of bounded work units
+- temporary filesystem/process state inside the sandbox
+- returning structured results to the orchestrating agent
+
+E2B task runners do not own:
+- long-lived agent identity
+- operator-facing status truth
+- system-wide history
+- the permanent control-plane record
+
+## 7. Storage Split
 
 The control plane should use two SQLite databases.
 
-### 6.1 `system.db`
+### 7.1 `system.db`
 
 `system.db` is for system-wide control-plane state.
 
@@ -158,7 +231,7 @@ This is the main source for:
 - self-care history
 - benchmark comparisons
 
-### 6.2 `agent.db`
+### 7.2 `agent.db`
 
 `agent.db` is for detailed agent and pipeline activity.
 
@@ -176,7 +249,7 @@ Rule:
 - observer reads summaries and references
 - detailed pipeline and agent history remains in `agent.db`
 
-### 6.3 Shared constraints
+### 7.3 Shared constraints
 
 Both databases should use:
 - WAL mode
@@ -184,9 +257,9 @@ Both databases should use:
 - explicit retention policies
 - correlation IDs for cross-referencing related events
 
-## 7. Data Contracts
+## 8. Data Contracts
 
-### 7.1 `ServiceStatus`
+### 8.1 `ServiceStatus`
 
 ```json
 {
@@ -201,7 +274,7 @@ Both databases should use:
 }
 ```
 
-### 7.2 `ObserverEvent`
+### 8.2 `ObserverEvent`
 
 ```json
 {
@@ -218,7 +291,7 @@ Both databases should use:
 }
 ```
 
-### 7.3 `BenchmarkSnapshot`
+### 8.3 `BenchmarkSnapshot`
 
 ```json
 {
@@ -236,7 +309,7 @@ Kinds:
 - `pre_care`
 - `post_care`
 
-### 7.4 `SelfCareCycle`
+### 8.4 `SelfCareCycle`
 
 ```json
 {
@@ -251,7 +324,7 @@ Kinds:
 }
 ```
 
-### 7.5 `RemediationAction`
+### 8.5 `RemediationAction`
 
 ```json
 {
@@ -259,6 +332,37 @@ Kinds:
   "target_service": "cheap-runtime",
   "result": "success",
   "message": "Requested restart after dead pid detection"
+}
+```
+
+### 8.6 `SandboxTaskRequest`
+
+```json
+{
+  "task_id": "task_01",
+  "pipeline_id": "intake",
+  "agent_id": "triage-agent-02",
+  "sandbox_type": "e2b",
+  "action": "execute_script",
+  "payload": {
+    "script": "python classify.py",
+    "files": ["input.json"]
+  },
+  "correlation_id": "corr_02"
+}
+```
+
+### 8.7 `SandboxTaskResult`
+
+```json
+{
+  "task_id": "task_01",
+  "status": "success",
+  "summary": "classification completed",
+  "artifacts": ["result.json"],
+  "error": "",
+  "correlation_id": "corr_02",
+  "completed_at": "2026-03-23T15:00:10Z"
 }
 ```
 
@@ -285,6 +389,7 @@ The observer should expose a dashboard-friendly API through the existing health 
 Recommended endpoints:
 - `GET /observer/overview`
 - `GET /observer/services`
+- `GET /observer/agents`
 - `GET /observer/events`
 - `GET /observer/benchmarks`
 - `GET /observer/self-care/cycles`

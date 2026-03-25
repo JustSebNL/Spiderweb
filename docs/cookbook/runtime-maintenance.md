@@ -39,4 +39,4 @@ Spiderweb runtime maintenance is meant to be a low-noise local janitor, not a be
 - `pkg/maintenance/service.go`
 - `cmd/spiderweb/internal/gateway/helpers.go`
 - `scripts/stop_trigger_worker.sh`
-- `scripts/stop_youtu_vllm.sh`
+- `scripts/stop_brain_vllm.sh`

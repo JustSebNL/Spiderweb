@@ -16,9 +16,9 @@ func TestNewSpiderwebCommand(t *testing.T) {
 
 	require.NotNil(t, cmd)
 
-	short := fmt.Sprintf("%s spiderweb - Intake Patch for OpenClaw v%s\n\n", internal.Logo, internal.GetVersion())
+	short := fmt.Sprintf("%s sweb - Intake Patch for OpenClaw v%s\n\n", internal.Logo, internal.GetVersion())
 
-	assert.Equal(t, "spiderweb", cmd.Use)
+	assert.Equal(t, "sweb", cmd.Use)
 	assert.Equal(t, short, cmd.Short)
 
 	assert.True(t, cmd.HasSubCommands())
@@ -38,11 +38,11 @@ func TestNewSpiderwebCommand(t *testing.T) {
 		"cron",
 		"gateway",
 		"migrate",
-		"onboard",
 		"skills",
 		"status",
 		"transfer",
 		"version",
+		"wakeup",
 	}
 
 	subcommands := cmd.Commands()

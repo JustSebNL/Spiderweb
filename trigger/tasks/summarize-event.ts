@@ -3,11 +3,11 @@ import { task } from "@trigger.dev/sdk";
 const DEFAULT_MODEL = "tencent/Youtu-LLM-2B";
 
 function getBaseUrl(): string {
-  return process.env.YOUTU_VLLM_BASE_URL ?? "http://127.0.0.1:8000/v1";
+  return process.env.BRAIN_VLLM_BASE_URL ?? process.env.YOUTU_VLLM_BASE_URL ?? "http://127.0.0.1:8000/v1";
 }
 
 function getApiKey(): string {
-  return process.env.YOUTU_VLLM_API_KEY ?? "dummy";
+  return process.env.BRAIN_VLLM_API_KEY ?? process.env.YOUTU_VLLM_API_KEY ?? "dummy";
 }
 
 async function summarize(input: string) {

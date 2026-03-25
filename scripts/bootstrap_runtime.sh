@@ -6,7 +6,7 @@ set -euo pipefail
 # - prepare a bare Linux host
 # - install Spiderweb build/runtime prerequisites
 # - install Spiderweb core through install_spiderweb.sh
-# - prepare Trigger.dev workspace dependencies
+# - optionally prepare Trigger.dev workspace dependencies
 # - inspect the machine and autonomously choose cheap-cognition runtime
 # - download the matching Youtu model format
 # - start the matching local model service
@@ -26,15 +26,14 @@ SPIDERWEB_DIR="${SPIDERWEB_DIR:-$HOME/spiderweb}"
 INSTALL_PREFIX="${INSTALL_PREFIX:-$HOME/.local}"
 TRIGGER_DIR="${TRIGGER_DIR:-$SPIDERWEB_DIR/trigger}"
 BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$SPIDERWEB_DIR/brain}}"
-YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 YOUTU_MODEL_REPO="${YOUTU_MODEL_REPO:-tencent/Youtu-LLM-2B}"
 YOUTU_GGUF_REPO="${YOUTU_GGUF_REPO:-tencent/Youtu-LLM-2B-GGUF}"
 YOUTU_GGUF_FILE="${YOUTU_GGUF_FILE:-Youtu-LLM-2B-Q8_0.gguf}"
-YOUTU_CACHE_DIR="${YOUTU_CACHE_DIR:-$YOUTU_DIR/model-cache}"
-YOUTU_VLLM_PORT="${YOUTU_VLLM_PORT:-8000}"
-YOUTU_LLAMA_CPP_PORT="${YOUTU_LLAMA_CPP_PORT:-8081}"
+BRAIN_MODEL_CACHE_DIR="${BRAIN_MODEL_CACHE_DIR:-${YOUTU_CACHE_DIR:-$BRAIN_DIR/model-cache}}"
+BRAIN_VLLM_PORT="${BRAIN_VLLM_PORT:-${YOUTU_VLLM_PORT:-8000}}"
+BRAIN_LLAMA_CPP_PORT="${BRAIN_LLAMA_CPP_PORT:-${YOUTU_LLAMA_CPP_PORT:-8081}}"
 AUTO_START_MODEL_SERVICE="${AUTO_START_MODEL_SERVICE:-1}"
-AUTO_INSTALL_TRIGGER_DEPS="${AUTO_INSTALL_TRIGGER_DEPS:-1}"
+AUTO_INSTALL_TRIGGER_DEPS="${AUTO_INSTALL_TRIGGER_DEPS:-0}"
 CHEAP_COGNITION_RUNTIME="${CHEAP_COGNITION_RUNTIME:-auto}"
 DRY_RUN=0
 PKG_MANAGER=""
@@ -42,11 +41,31 @@ SELECTED_RUNTIME=""
 SELECTED_MODEL=""
 SELECTED_BASE_URL=""
 GENERATED_ENV_FILE="${SPIDERWEB_DIR}/.generated/spiderweb-runtime.env"
+SPIDERWEB_HOME_DIR="${SPIDERWEB_HOME_DIR:-$HOME/.spiderweb}"
+HF_HOME_DIR="${HF_HOME_DIR:-$SPIDERWEB_HOME_DIR/hf}"
+HF_HUB_CACHE_DIR="${HF_HUB_CACHE_DIR:-$HF_HOME_DIR/hub}"
 
 log() { printf "[INFO] %s\n" "$*"; }
 warn() { printf "[WARN] %s\n" "$*" >&2; }
 err() { printf "[ERROR] %s\n" "$*" >&2; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+brain_vllm_patches_ready() {
+  local patches_dir="$SCRIPT_DIR/../infra/vllm/patches"
+  local required=(
+    "youtu_llm.py"
+    "configuration_youtu.py"
+    "registry.py"
+    "__init__.py"
+  )
+  local file=""
+  for file in "${required[@]}"; do
+    if [ ! -f "$patches_dir/$file" ]; then
+      return 1
+    fi
+  done
+  return 0
+}
 
 usage() {
   cat <<'EOF'
@@ -158,12 +177,12 @@ install_spiderweb_core() {
 }
 
 prepare_directories() {
-  run_cmd "mkdir -p '$YOUTU_DIR' '$YOUTU_CACHE_DIR' '$(dirname "$GENERATED_ENV_FILE")'"
+  run_cmd "mkdir -p '$BRAIN_DIR' '$BRAIN_MODEL_CACHE_DIR' '$HF_HOME_DIR' '$HF_HUB_CACHE_DIR' '$(dirname "$GENERATED_ENV_FILE")'"
 }
 
 install_python_model_tools() {
   if have_cmd python3; then
-    run_cmd "python3 -m pip install --upgrade pip huggingface_hub"
+    run_cmd "HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' python3 -m pip install --upgrade pip huggingface_hub"
   else
     warn "python3 not available; cannot install huggingface_hub automatically"
   fi
@@ -195,12 +214,22 @@ select_runtime() {
       ;;
   esac
 
+  if [ "$SELECTED_RUNTIME" = "vllm" ] && ! brain_vllm_patches_ready; then
+    if [ "$CHEAP_COGNITION_RUNTIME" = "vllm" ]; then
+      err "Native vLLM requires the Youtu integration files under $SCRIPT_DIR/../infra/vllm/patches/"
+      err "Missing one or more of: youtu_llm.py, configuration_youtu.py, registry.py, __init__.py"
+      exit 1
+    fi
+    warn "Native vLLM patches are missing; falling back to llama.cpp"
+    SELECTED_RUNTIME="llama_cpp"
+  fi
+
   if [ "$SELECTED_RUNTIME" = "vllm" ]; then
     SELECTED_MODEL="$YOUTU_MODEL_REPO"
-    SELECTED_BASE_URL="http://127.0.0.1:${YOUTU_VLLM_PORT}/v1"
+    SELECTED_BASE_URL="http://127.0.0.1:${BRAIN_VLLM_PORT}/v1"
   else
     SELECTED_MODEL="$YOUTU_GGUF_REPO:$YOUTU_GGUF_FILE"
-    SELECTED_BASE_URL="http://127.0.0.1:${YOUTU_LLAMA_CPP_PORT}/v1"
+    SELECTED_BASE_URL="http://127.0.0.1:${BRAIN_LLAMA_CPP_PORT}/v1"
   fi
 
   log "Selected cheap-cognition runtime: $SELECTED_RUNTIME"
@@ -212,7 +241,7 @@ download_vllm_model() {
     warn "HF_TOKEN is not set. Skipping automated Hugging Face model pull for vLLM path."
     return 0
   fi
-  run_cmd "python3 -m huggingface_hub download '$YOUTU_MODEL_REPO' --local-dir '$YOUTU_DIR' --token '$HF_TOKEN'"
+  run_cmd "HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' python3 -m huggingface_hub download '$YOUTU_MODEL_REPO' --local-dir '$BRAIN_DIR' --token '$HF_TOKEN'"
 }
 
 download_gguf_model() {
@@ -220,7 +249,7 @@ download_gguf_model() {
     warn "HF_TOKEN is not set. Skipping automated Hugging Face GGUF pull for llama.cpp path."
     return 0
   fi
-  run_cmd "python3 -m huggingface_hub download '$YOUTU_GGUF_REPO' '$YOUTU_GGUF_FILE' --local-dir '$YOUTU_DIR' --token '$HF_TOKEN'"
+  run_cmd "HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' python3 -m huggingface_hub download '$YOUTU_GGUF_REPO' '$YOUTU_GGUF_FILE' --local-dir '$BRAIN_DIR' --token '$HF_TOKEN'"
 }
 
 install_trigger_dependencies() {
@@ -262,8 +291,8 @@ start_llama_cpp_server() {
     return 0
   fi
 
-  local gguf_path="$YOUTU_DIR/$YOUTU_GGUF_FILE"
-  local pid_file="$YOUTU_DIR/llama-server.pid"
+  local gguf_path="$BRAIN_DIR/$YOUTU_GGUF_FILE"
+  local pid_file="$BRAIN_DIR/llama-server.pid"
 
   if [ ! -f "$gguf_path" ]; then
     warn "GGUF file not found at $gguf_path; llama.cpp server cannot start yet"
@@ -271,7 +300,7 @@ start_llama_cpp_server() {
   fi
 
   run_cmd "if [ -f '$pid_file' ] && kill -0 \"\$(cat '$pid_file')\" 2>/dev/null; then exit 0; fi"
-  run_cmd "nohup '$INSTALL_PREFIX/bin/llama-server' -m '$gguf_path' --host 0.0.0.0 --port '$YOUTU_LLAMA_CPP_PORT' --log-disable > '$YOUTU_DIR/llama-server.log' 2>&1 & echo \$! > '$pid_file'"
+  run_cmd "nohup '$INSTALL_PREFIX/bin/llama-server' -m '$gguf_path' --host 0.0.0.0 --port '$BRAIN_LLAMA_CPP_PORT' --log-disable > '$BRAIN_DIR/llama-server.log' 2>&1 & echo \$! > '$pid_file'"
 }
 
 write_generated_env() {
@@ -282,6 +311,8 @@ SPIDERWEB_INTAKE_CHEAP_COGNITION_BASE_URL=$SELECTED_BASE_URL
 SPIDERWEB_INTAKE_CHEAP_COGNITION_MODEL=${YOUTU_MODEL_REPO}
 SPIDERWEB_INTAKE_CHEAP_COGNITION_API_KEY=
 SPIDERWEB_INTAKE_CHEAP_COGNITION_TIMEOUT_SECONDS=30
+HF_HOME=$HF_HOME_DIR
+HF_HUB_CACHE=$HF_HUB_CACHE_DIR
 EOF"
 }
 
@@ -305,6 +336,8 @@ Autonomous runtime decision:
 - runtime: ${SELECTED_RUNTIME}
 - base URL: ${SELECTED_BASE_URL}
 - generated env: ${GENERATED_ENV_FILE}
+- HF cache home: ${HF_HOME_DIR}
+- HF hub cache: ${HF_HUB_CACHE_DIR}
 
 Expected next steps:
 - source the generated env file before running Spiderweb services if needed

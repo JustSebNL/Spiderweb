@@ -11,10 +11,44 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JustSebNL/Spiderweb/pkg/agentdb"
 	"github.com/JustSebNL/Spiderweb/pkg/bus"
+	"github.com/JustSebNL/Spiderweb/pkg/config"
 	"github.com/JustSebNL/Spiderweb/pkg/constants"
 	"github.com/JustSebNL/Spiderweb/pkg/maintenance"
 )
+
+func prepareObserverRuntime(t *testing.T) (*Server, string) {
+	t.Helper()
+	s := NewServer("127.0.0.1", 0)
+	s.SetReady(true)
+
+	workspace := t.TempDir()
+	healthFile := filepath.Join(workspace, "runtime-health.json")
+	s.SetWorkspace(workspace)
+	s.SetObserverHealthFile(healthFile)
+
+	svc := maintenance.NewService(
+		workspace,
+		config.MaintenanceConfig{
+			Enabled:               true,
+			HealthFile:            healthFile,
+			AutoRemediate:         false,
+			BudgetPercent:         5,
+			RestartBackoffMinutes: 30,
+		},
+		config.CheapCognitionConfig{Enabled: false},
+		config.TriggerConfig{
+			Enabled: true,
+			PIDFile: filepath.Join(workspace, "missing-trigger.pid"),
+		},
+		nil,
+		nil,
+		nil,
+	)
+	svc.RunOnce(context.Background())
+	return s, workspace
+}
 
 func TestValveState_NoBus(t *testing.T) {
 	s := NewServer("127.0.0.1", 0)
@@ -164,5 +198,344 @@ func TestObserverOverviewHandler_NotFoundWithoutSnapshot(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+}
+
+func TestObserverStats24hHandler(t *testing.T) {
+	s, _ := prepareObserverRuntime(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/observer/stats/24h", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		TotalEvents    int `json:"total_events"`
+		ErrorEvents    int `json:"error_events"`
+		CriticalEvents int `json:"critical_events"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal stats24h: %v", err)
+	}
+	if resp.TotalEvents == 0 {
+		t.Fatalf("expected observer stats endpoint to report events")
+	}
+}
+
+func TestObserverEventsHandler(t *testing.T) {
+	s, _ := prepareObserverRuntime(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/observer/events?limit=5", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Events []struct {
+			EventType string `json:"event_type"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal events: %v", err)
+	}
+	if len(resp.Events) == 0 {
+		t.Fatalf("expected at least one observer event")
+	}
+}
+
+func TestObserverSelfCareCyclesHandler(t *testing.T) {
+	s, _ := prepareObserverRuntime(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/observer/self-care/cycles?limit=5", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Cycles []struct {
+			Kind  string `json:"kind"`
+			Score int    `json:"score"`
+		} `json:"cycles"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal cycles: %v", err)
+	}
+	if len(resp.Cycles) == 0 {
+		t.Fatalf("expected at least one self-care cycle")
+	}
+}
+
+func TestObserverDashboardHandler(t *testing.T) {
+	s, workspace := prepareObserverRuntime(t)
+
+	agentStore, err := agentdb.Open(filepath.Join(workspace, "agent.db"))
+	if err != nil {
+		t.Fatalf("open agent db: %v", err)
+	}
+	defer agentStore.Close()
+	now := time.Now().UTC()
+	if err := agentStore.RecordPresence(agentdb.AgentPresence{
+		AgentID:    "pipeline-alerts",
+		AgentName:  "Pipeline Alerts",
+		PipelineID: "alerts",
+		State:      "busy",
+		Status:     "busy",
+		LastSeenAt: now,
+		UpdatedAt:  now,
+	}); err != nil {
+		t.Fatalf("record presence: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/observer/dashboard?limit=5", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Overview *struct {
+			Score int `json:"score"`
+		} `json:"overview"`
+		Services []any `json:"services"`
+		Agents   []any `json:"agents"`
+		Events   []any `json:"events"`
+		SelfCare *struct {
+			Cycles []any `json:"cycles"`
+		} `json:"self_care"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal dashboard: %v", err)
+	}
+	if resp.Overview == nil || resp.Overview.Score == 0 {
+		t.Fatalf("expected dashboard overview score")
+	}
+	if len(resp.Services) == 0 || len(resp.Events) == 0 || resp.SelfCare == nil || len(resp.SelfCare.Cycles) == 0 {
+		t.Fatalf("expected dashboard response to include services, events, and self-care cycles")
+	}
+	if len(resp.Agents) == 0 {
+		t.Fatalf("expected dashboard response to include agents")
+	}
+}
+
+func TestObserverAgentsHandler(t *testing.T) {
+	s := NewServer("127.0.0.1", 0)
+	s.SetReady(true)
+
+	workspace := t.TempDir()
+	healthFile := filepath.Join(workspace, "runtime-health.json")
+	s.SetWorkspace(workspace)
+	s.SetObserverHealthFile(healthFile)
+
+	store, err := agentdb.Open(filepath.Join(workspace, "agent.db"))
+	if err != nil {
+		t.Fatalf("open agent db: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now().UTC()
+	if err := store.RecordPresence(agentdb.AgentPresence{
+		AgentID:         "pipeline-alerts",
+		AgentName:       "Pipeline Alerts",
+		PipelineID:      "alerts",
+		State:           "busy",
+		Status:          "busy",
+		Channel:         "slack",
+		ChatID:          "room-1",
+		LastTaskSummary: "processed alert batch",
+		LastSeenAt:      now,
+		UpdatedAt:       now,
+	}); err != nil {
+		t.Fatalf("record presence: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/observer/agents", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Agents []struct {
+			AgentID    string `json:"agent_id"`
+			PipelineID string `json:"pipeline_id"`
+			State      string `json:"state"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal agents: %v", err)
+	}
+	if len(resp.Agents) != 1 {
+		t.Fatalf("agents len = %d, want 1", len(resp.Agents))
+	}
+	if resp.Agents[0].AgentID != "pipeline-alerts" || resp.Agents[0].PipelineID != "alerts" || resp.Agents[0].State != "busy" {
+		t.Fatalf("unexpected agents payload: %+v", resp.Agents[0])
+	}
+}
+
+func TestObserverAgentsSummaryHandler(t *testing.T) {
+	s := NewServer("127.0.0.1", 0)
+	s.SetReady(true)
+
+	workspace := t.TempDir()
+	healthFile := filepath.Join(workspace, "runtime-health.json")
+	s.SetWorkspace(workspace)
+	s.SetObserverHealthFile(healthFile)
+
+	store, err := agentdb.Open(filepath.Join(workspace, "agent.db"))
+	if err != nil {
+		t.Fatalf("open agent db: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now().UTC()
+	for _, item := range []agentdb.AgentPresence{
+		{AgentID: "a1", AgentName: "A1", PipelineID: "alerts", State: "busy", LastSeenAt: now, UpdatedAt: now},
+		{AgentID: "a2", AgentName: "A2", PipelineID: "alerts", State: "idle", LastSeenAt: now, UpdatedAt: now},
+	} {
+		if err := store.RecordPresence(item); err != nil {
+			t.Fatalf("record presence: %v", err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/observer/agents/summary", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Total      int            `json:"total"`
+		ByState    map[string]int `json:"by_state"`
+		ByPipeline map[string]int `json:"by_pipeline"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if resp.Total != 2 || resp.ByPipeline["alerts"] != 2 {
+		t.Fatalf("unexpected agent summary: %+v", resp)
+	}
+}
+
+func TestObserverRestartHandler(t *testing.T) {
+	s := NewServer("127.0.0.1", 0)
+	s.SetReady(true)
+	s.SetObserverRestartFunc(func(ctx context.Context, service string) (map[string]any, error) {
+		return map[string]any{"ok": true, "action": "restart"}, nil
+	})
+
+	body := bytes.NewBufferString(`{"service":"trigger"}`)
+	req := httptest.NewRequest(http.MethodPost, "/observer/actions/restart", body)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestObserverSelfCareRunHandler(t *testing.T) {
+	s := NewServer("127.0.0.1", 0)
+	s.SetReady(true)
+	s.SetObserverSelfCareFunc(func(ctx context.Context) (map[string]any, error) {
+		return map[string]any{"ok": true, "action": "self_care_run"}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/observer/actions/self-care/run", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestObserverGenerateAndLatestReportHandlers(t *testing.T) {
+	s, workspace := prepareObserverRuntime(t)
+
+	agentStore, err := agentdb.Open(filepath.Join(workspace, "agent.db"))
+	if err != nil {
+		t.Fatalf("open agent db: %v", err)
+	}
+	defer agentStore.Close()
+	now := time.Now().UTC()
+	if err := agentStore.RecordPresence(agentdb.AgentPresence{
+		AgentID:    "pipeline-alerts",
+		AgentName:  "Pipeline Alerts",
+		PipelineID: "alerts",
+		State:      "busy",
+		LastSeenAt: now,
+		UpdatedAt:  now,
+	}); err != nil {
+		t.Fatalf("record presence: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/observer/reports/generate?limit=5", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("generate status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/observer/reports/latest", nil)
+	w = httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("latest status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/observer/reports/latest?format=html", nil)
+	w = httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("latest html status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Fatalf("unexpected content type: %q", ct)
+	}
+}
+
+func TestObserverJournalGenerateAndLatestHandlers(t *testing.T) {
+	s, _ := prepareObserverRuntime(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/observer/journal/generate", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("journal generate status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var generated struct {
+		Entry *struct {
+			Title string `json:"title"`
+			Body  string `json:"body"`
+		} `json:"entry"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &generated); err != nil {
+		t.Fatalf("unmarshal generated journal: %v", err)
+	}
+	if generated.Entry == nil || generated.Entry.Title == "" || generated.Entry.Body == "" {
+		t.Fatalf("expected generated journal entry")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/observer/journal/latest", nil)
+	w = httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("journal latest status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
 }

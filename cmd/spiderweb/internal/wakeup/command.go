@@ -1,4 +1,4 @@
-package onboard
+package wakeup
 
 import (
 	"embed"
@@ -11,13 +11,13 @@ import (
 //go:embed workspace agents
 var embeddedFiles embed.FS
 
-func NewOnboardCommand() *cobra.Command {
+func NewWakeupCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "onboard",
-		Aliases: []string{"o"},
-		Short:   "Initialize spiderweb configuration and workspace",
+		Use:     "wakeup",
+		Aliases: []string{"wake", "o"},
+		Short:   "Initialize Spiderweb configuration and workspace",
 		Run: func(cmd *cobra.Command, args []string) {
-			onboard()
+			runWakeup()
 		},
 	}
 

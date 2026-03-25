@@ -100,3 +100,49 @@ Examples:
 
 ## Connector output contract
 Every connector should output normalized events only. A connector should not emit source-specific ad hoc packets into downstream routing.
+
+## Current Spiderweb-aligned output shape
+
+If a connector is feeding the current intake path, it should emit a `bus.InboundMessage`-compatible shape:
+
+```json
+{
+  "channel": "slack",
+  "sender_id": "U12345",
+  "chat_id": "C99999",
+  "content": "Production deploy looks unhealthy",
+  "session_key": "",
+  "metadata": {
+    "account_id": "default",
+    "service": "deployments",
+    "peer_kind": "channel",
+    "peer_id": "C99999",
+    "source_event_id": "slack:C99999:1738192211.000400"
+  }
+}
+```
+
+Important metadata fields in the current routing path:
+- `account_id`
+- `service` or `service_name`
+- `peer_kind`
+- `peer_id`
+- `guild_id` or `team_id` where relevant
+- `source_event_id` for traceability
+
+## Current connector-to-intake rule
+
+Connectors should:
+- produce stable metadata that routing and OpenClaw forwarding can inspect
+- avoid embedding policy decisions in the connector itself
+- leave cheap-cognition enrichment to the intake layer
+
+That means a connector should say:
+- what happened
+- where it happened
+- which service/source emitted it
+
+It should not decide:
+- whether OpenClaw must be involved
+- whether the event is high-value
+- which agent should reason about it

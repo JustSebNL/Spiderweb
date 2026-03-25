@@ -49,10 +49,11 @@ Useful form:
 sweb gateway --debug
 ```
 
-### `sweb onboard`
-Run onboarding flow.
+### `sweb wakeup`
+Run setup / wakeup flow.
 
 Alias:
+- `sweb wake`
 - `sweb o`
 
 ### `sweb agent`

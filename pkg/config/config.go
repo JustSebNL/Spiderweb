@@ -49,19 +49,19 @@ func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
 }
 
 type Config struct {
-	Agents    AgentsConfig    `json:"agents"`
-	Bindings  []AgentBinding  `json:"bindings,omitempty"`
-	Session   SessionConfig   `json:"session,omitempty"`
-	Channels  ChannelsConfig  `json:"channels"`
-	Providers ProvidersConfig `json:"providers,omitempty"`
-	ModelList []ModelConfig   `json:"model_list"` // New model-centric provider configuration
-	Gateway   GatewayConfig   `json:"gateway"`
-	Tools     ToolsConfig     `json:"tools"`
-	Intake    IntakeConfig    `json:"intake"`
-	Trigger    TriggerConfig    `json:"trigger"`
+	Agents      AgentsConfig      `json:"agents"`
+	Bindings    []AgentBinding    `json:"bindings,omitempty"`
+	Session     SessionConfig     `json:"session,omitempty"`
+	Channels    ChannelsConfig    `json:"channels"`
+	Providers   ProvidersConfig   `json:"providers,omitempty"`
+	ModelList   []ModelConfig     `json:"model_list"` // New model-centric provider configuration
+	Gateway     GatewayConfig     `json:"gateway"`
+	Tools       ToolsConfig       `json:"tools"`
+	Intake      IntakeConfig      `json:"intake"`
+	Trigger     TriggerConfig     `json:"trigger"`
 	Maintenance MaintenanceConfig `json:"maintenance"`
-	Heartbeat  HeartbeatConfig  `json:"heartbeat"`
-	Devices    DevicesConfig    `json:"devices"`
+	Heartbeat   HeartbeatConfig   `json:"heartbeat"`
+	Devices     DevicesConfig     `json:"devices"`
 }
 
 // MarshalJSON implements custom JSON marshaling for Config
@@ -322,12 +322,12 @@ type WeComAppConfig struct {
 }
 
 type OpenClawConfig struct {
-	Enabled        bool                `json:"enabled"          env:"SPIDERWEB_CHANNELS_OPENCLAW_ENABLED"`
-	SharedSecret   string              `json:"shared_secret"    env:"SPIDERWEB_CHANNELS_OPENCLAW_SHARED_SECRET"`
-	AllowFrom      FlexibleStringSlice `json:"allow_from"       env:"SPIDERWEB_CHANNELS_OPENCLAW_ALLOW_FROM"`
-	AutoHandshake  bool                `json:"auto_handshake"   env:"SPIDERWEB_CHANNELS_OPENCLAW_AUTO_HANDSHAKE"`
-	IntakeEnabled  bool                `json:"intake_enabled"   env:"SPIDERWEB_CHANNELS_OPENCLAW_INTAKE_ENABLED"`
-	WebhookPath    string              `json:"webhook_path"     env:"SPIDERWEB_CHANNELS_OPENCLAW_WEBHOOK_PATH"`
+	Enabled       bool                `json:"enabled"          env:"SPIDERWEB_CHANNELS_OPENCLAW_ENABLED"`
+	SharedSecret  string              `json:"shared_secret"    env:"SPIDERWEB_CHANNELS_OPENCLAW_SHARED_SECRET"`
+	AllowFrom     FlexibleStringSlice `json:"allow_from"       env:"SPIDERWEB_CHANNELS_OPENCLAW_ALLOW_FROM"`
+	AutoHandshake bool                `json:"auto_handshake"   env:"SPIDERWEB_CHANNELS_OPENCLAW_AUTO_HANDSHAKE"`
+	IntakeEnabled bool                `json:"intake_enabled"   env:"SPIDERWEB_CHANNELS_OPENCLAW_INTAKE_ENABLED"`
+	WebhookPath   string              `json:"webhook_path"     env:"SPIDERWEB_CHANNELS_OPENCLAW_WEBHOOK_PATH"`
 }
 
 type HeartbeatConfig struct {
@@ -370,17 +370,21 @@ type CheapCognitionConfig struct {
 }
 
 type IntakeConfig struct {
-	Enabled             bool                 `json:"enabled"               env:"SPIDERWEB_INTAKE_ENABLED"`
-	CoalesceWindowMs    int                  `json:"coalesce_window_ms"    env:"SPIDERWEB_INTAKE_COALESCE_WINDOW_MS"`
-	MaxBatchMessages    int                  `json:"max_batch_messages"    env:"SPIDERWEB_INTAKE_MAX_BATCH_MESSAGES"`
-	MaxBatchChars       int                  `json:"max_batch_chars"       env:"SPIDERWEB_INTAKE_MAX_BATCH_CHARS"`
-	DedupeWindowSeconds int                  `json:"dedupe_window_seconds" env:"SPIDERWEB_INTAKE_DEDUPE_WINDOW_SECONDS"`
-	FollowUpEnabled     bool                 `json:"follow_up_enabled"     env:"SPIDERWEB_INTAKE_FOLLOW_UP_ENABLED"`
-	FollowUpWindowSec   int                  `json:"follow_up_window_sec"  env:"SPIDERWEB_INTAKE_FOLLOW_UP_WINDOW_SEC"`
-	FollowUpMaxItems    int                  `json:"follow_up_max_items"   env:"SPIDERWEB_INTAKE_FOLLOW_UP_MAX_ITEMS"`
-	ForwardURL          string               `json:"forward_url"           env:"SPIDERWEB_INTAKE_FORWARD_URL"`
-	ForwardTimeout      int                  `json:"forward_timeout"       env:"SPIDERWEB_INTAKE_FORWARD_TIMEOUT"`
-	CheapCognition      CheapCognitionConfig `json:"cheap_cognition"`
+	Enabled              bool                 `json:"enabled"               env:"SPIDERWEB_INTAKE_ENABLED"`
+	CoalesceWindowMs     int                  `json:"coalesce_window_ms"    env:"SPIDERWEB_INTAKE_COALESCE_WINDOW_MS"`
+	MaxBatchMessages     int                  `json:"max_batch_messages"    env:"SPIDERWEB_INTAKE_MAX_BATCH_MESSAGES"`
+	MaxBatchChars        int                  `json:"max_batch_chars"       env:"SPIDERWEB_INTAKE_MAX_BATCH_CHARS"`
+	DedupeWindowSeconds  int                  `json:"dedupe_window_seconds" env:"SPIDERWEB_INTAKE_DEDUPE_WINDOW_SECONDS"`
+	FollowUpEnabled      bool                 `json:"follow_up_enabled"     env:"SPIDERWEB_INTAKE_FOLLOW_UP_ENABLED"`
+	FollowUpWindowSec    int                  `json:"follow_up_window_sec"  env:"SPIDERWEB_INTAKE_FOLLOW_UP_WINDOW_SEC"`
+	FollowUpMaxItems     int                  `json:"follow_up_max_items"   env:"SPIDERWEB_INTAKE_FOLLOW_UP_MAX_ITEMS"`
+	ForwardURL           string               `json:"forward_url"           env:"SPIDERWEB_INTAKE_FORWARD_URL"`
+	ForwardTimeout       int                  `json:"forward_timeout"       env:"SPIDERWEB_INTAKE_FORWARD_TIMEOUT"`
+	ForwardAllowChannels FlexibleStringSlice  `json:"forward_allow_channels" env:"SPIDERWEB_INTAKE_FORWARD_ALLOW_CHANNELS"`
+	ForwardDenyChannels  FlexibleStringSlice  `json:"forward_deny_channels"  env:"SPIDERWEB_INTAKE_FORWARD_DENY_CHANNELS"`
+	ForwardAllowServices FlexibleStringSlice  `json:"forward_allow_services" env:"SPIDERWEB_INTAKE_FORWARD_ALLOW_SERVICES"`
+	ForwardDenyServices  FlexibleStringSlice  `json:"forward_deny_services"  env:"SPIDERWEB_INTAKE_FORWARD_DENY_SERVICES"`
+	CheapCognition       CheapCognitionConfig `json:"cheap_cognition"`
 }
 
 type DevicesConfig struct {

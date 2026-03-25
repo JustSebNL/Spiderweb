@@ -48,6 +48,14 @@ Fields:
 - `intake_enabled`: advertise Spiderweb as intake layer
 - `webhook_path`: bridge path, defaults to `/bridge/openclaw`
 
+Optional intake route filters live under `intake`:
+- `forward_allow_channels`
+- `forward_deny_channels`
+- `forward_allow_services`
+- `forward_deny_services`
+
+Use them when only specific channels or service sources should forward to OpenClaw.
+
 ## Start The Gateway
 
 The bridge is served by the gateway process.

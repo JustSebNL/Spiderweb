@@ -11,11 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/JustSebNL/Spiderweb/pkg/config"
 	"github.com/JustSebNL/Spiderweb/pkg/logger"
+	"github.com/JustSebNL/Spiderweb/pkg/systemdb"
 )
 
 type RuntimeController interface {
@@ -37,40 +39,44 @@ type CheapCognitionSnapshot struct {
 }
 
 type ProcessState struct {
-	Name     string `json:"name"`
-	PIDFile  string `json:"pid_file,omitempty"`
-	Running  bool   `json:"running"`
-	Owned    bool   `json:"owned"`
-	Action   string `json:"action,omitempty"`
-	Message  string `json:"message,omitempty"`
+	Name    string `json:"name"`
+	PIDFile string `json:"pid_file,omitempty"`
+	Running bool   `json:"running"`
+	Owned   bool   `json:"owned"`
+	Action  string `json:"action,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type HealthSnapshot struct {
-	Timestamp            time.Time               `json:"timestamp"`
-	Score                int                     `json:"score"`
-	Summary              string                  `json:"summary"`
-	Baseline             bool                    `json:"baseline,omitempty"`
-	Deferred             bool                    `json:"deferred,omitempty"`
-	ComparedTo           string                  `json:"compared_to,omitempty"`
-	Recommendations      []string                `json:"recommendations,omitempty"`
-	Processes            map[string]ProcessState `json:"processes,omitempty"`
-	CheapCognition       CheapCognitionSnapshot  `json:"cheap_cognition"`
-	LastRemediationAt    time.Time               `json:"last_remediation_at,omitempty"`
-	LastRemediationAction string                 `json:"last_remediation_action,omitempty"`
+	Timestamp             time.Time               `json:"timestamp"`
+	Score                 int                     `json:"score"`
+	Summary               string                  `json:"summary"`
+	Baseline              bool                    `json:"baseline,omitempty"`
+	Deferred              bool                    `json:"deferred,omitempty"`
+	DeferReason           string                  `json:"defer_reason,omitempty"`
+	ComparedTo            string                  `json:"compared_to,omitempty"`
+	Recommendations       []string                `json:"recommendations,omitempty"`
+	Processes             map[string]ProcessState `json:"processes,omitempty"`
+	CheapCognition        CheapCognitionSnapshot  `json:"cheap_cognition"`
+	LastRemediationAt     time.Time               `json:"last_remediation_at,omitempty"`
+	LastRemediationAction string                  `json:"last_remediation_action,omitempty"`
 }
 
 type Service struct {
-	cfg             config.MaintenanceConfig
-	cheapCfg        config.CheapCognitionConfig
-	triggerCfg      config.TriggerConfig
-	workspace       string
-	healthFile      string
-	baselineFile    string
-	runtimeStats    RuntimeStats
-	triggerCtl      RuntimeController
-	youtuCtl        RuntimeController
-	mu              sync.RWMutex
-	stopChan        chan struct{}
+	cfg          config.MaintenanceConfig
+	cheapCfg     config.CheapCognitionConfig
+	triggerCfg   config.TriggerConfig
+	workspace    string
+	healthFile   string
+	baselineFile string
+	systemDBFile string
+	runtimeStats RuntimeStats
+	triggerCtl   RuntimeController
+	brainCtl     RuntimeController
+	mu           sync.RWMutex
+	stopChan     chan struct{}
+	runningCycle atomic.Bool
+	startupDelay time.Duration
 }
 
 func NewService(
@@ -80,7 +86,7 @@ func NewService(
 	triggerCfg config.TriggerConfig,
 	runtimeStats RuntimeStats,
 	triggerCtl RuntimeController,
-	youtuCtl RuntimeController,
+	brainCtl RuntimeController,
 ) *Service {
 	if cfg.IntervalHours <= 0 {
 		cfg.IntervalHours = 12
@@ -117,9 +123,11 @@ func NewService(
 		workspace:    workspace,
 		healthFile:   healthFile,
 		baselineFile: healthFile + ".baseline",
+		systemDBFile: filepath.Join(filepath.Dir(healthFile), "system.db"),
 		runtimeStats: runtimeStats,
 		triggerCtl:   triggerCtl,
-		youtuCtl:     youtuCtl,
+		brainCtl:     brainCtl,
+		startupDelay: 5 * time.Second,
 	}
 }
 
@@ -148,12 +156,15 @@ func (s *Service) Stop() {
 func (s *Service) runLoop(stopChan chan struct{}) {
 	interval := time.Duration(s.cfg.IntervalHours) * time.Hour
 	ticker := time.NewTicker(interval)
+	startup := time.NewTimer(s.startupDelay)
 	defer ticker.Stop()
-	time.AfterFunc(5*time.Second, func() { s.RunOnce(context.Background()) })
+	defer startup.Stop()
 	for {
 		select {
 		case <-stopChan:
 			return
+		case <-startup.C:
+			s.RunOnce(context.Background())
 		case <-ticker.C:
 			s.RunOnce(context.Background())
 		}
@@ -161,6 +172,15 @@ func (s *Service) runLoop(stopChan chan struct{}) {
 }
 
 func (s *Service) RunOnce(ctx context.Context) {
+	if !s.cfg.Enabled {
+		return
+	}
+	if !s.runningCycle.CompareAndSwap(false, true) {
+		logger.InfoC("maintenance", "Skipping overlapping maintenance run")
+		return
+	}
+	defer s.runningCycle.Store(false)
+
 	baseline, _ := s.readBaseline()
 	previous, _ := s.readSnapshot()
 	activeProbe := baseline == nil
@@ -178,6 +198,9 @@ func (s *Service) RunOnce(ctx context.Context) {
 	if err := s.writeSnapshot(snapshot); err != nil {
 		logger.WarnCF("maintenance", "Failed to write health snapshot", map[string]any{"error": err.Error()})
 		return
+	}
+	if err := s.writeSystemRecord(snapshot, baseline); err != nil {
+		logger.WarnCF("maintenance", "Failed to write observer system record", map[string]any{"error": err.Error()})
 	}
 	logger.InfoCF("maintenance", "Runtime self-check completed", map[string]any{"score": snapshot.Score, "summary": snapshot.Summary, "baseline": snapshot.Baseline})
 }
@@ -199,10 +222,11 @@ func (s *Service) collectSnapshot(ctx context.Context, baseline *HealthSnapshot,
 	}
 
 	cleanupBudget := s.maintenanceBudgetSlots()
-	deferMaintenance := s.shouldDeferMaintenance(snapshot.CheapCognition, activeProbe)
+	deferMaintenance, deferReason := s.shouldDeferMaintenance(snapshot.CheapCognition, previous, activeProbe)
 	if deferMaintenance {
 		snapshot.Deferred = true
-		snapshot.Recommendations = append(snapshot.Recommendations, "Maintenance actions deferred because the runtime was recently active")
+		snapshot.DeferReason = deferReason
+		snapshot.Recommendations = append(snapshot.Recommendations, deferReason)
 	}
 	if s.cheapCfg.Enabled {
 		state, penalty, notes := s.inspectCheapRuntime(ctx, activeProbe, deferMaintenance, previous, &cleanupBudget)
@@ -243,7 +267,7 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 
 	switch runtime {
 	case "vllm":
-		pidFile := envOrDefault("YOUTU_VLLM_PID_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "youtu-vllm.pid"))
+		pidFile := envOrDefault("BRAIN_VLLM_PID_FILE", envOrDefault("YOUTU_VLLM_PID_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "brain-vllm.pid")))
 		state.PIDFile = pidFile
 		state.Running = pidAlive(pidFile)
 		if !state.Running {
@@ -254,12 +278,12 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 					state.Action = trim
 				}
 			}
-			if s.cfg.AutoRemediate && s.cfg.RestartOnProcessDeath && s.youtuCtl != nil && !deferMaintenance && hasBudget(cleanupBudget) {
+			if s.cfg.AutoRemediate && s.cfg.RestartOnProcessDeath && s.brainCtl != nil && !deferMaintenance && hasBudget(cleanupBudget) {
 				if backedOff, reason := s.restartBackoffActive(previous); backedOff {
 					notes = append(notes, reason)
 				} else if !consumeBudget(cleanupBudget) {
 					notes = append(notes, "Maintenance budget exhausted before requesting vLLM restart")
-				} else if err := s.youtuCtl.Start(); err != nil {
+				} else if err := s.brainCtl.Start(); err != nil {
 					state.Action = "restart_failed"
 					state.Message = err.Error()
 					notes = append(notes, "Automatic vLLM restart failed")
@@ -279,7 +303,7 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 			}
 		}
 		if !deferMaintenance {
-			if trimmed, ok := trimLogIfNeeded(envOrDefault("YOUTU_VLLM_LOG_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "youtu-vllm.log")), s.cfg.MaxLogMB, cleanupBudget); ok {
+			if trimmed, ok := trimLogIfNeeded(envOrDefault("BRAIN_VLLM_LOG_FILE", envOrDefault("YOUTU_VLLM_LOG_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "brain-vllm.log"))), s.cfg.MaxLogMB, cleanupBudget); ok {
 				notes = append(notes, trimmed)
 			}
 		}
@@ -452,6 +476,61 @@ func (s *Service) readSnapshot() (*HealthSnapshot, error) {
 	return &snapshot, nil
 }
 
+func (s *Service) writeSystemRecord(snapshot HealthSnapshot, baseline *HealthSnapshot) error {
+	if s.systemDBFile == "" {
+		return nil
+	}
+	store, err := systemdb.Open(s.systemDBFile)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	record, err := systemRecordFromSnapshot(snapshot)
+	if err != nil {
+		return err
+	}
+	var baselineRecord *systemdb.MaintenanceRecord
+	if baseline != nil {
+		converted, err := systemRecordFromSnapshot(*baseline)
+		if err != nil {
+			return err
+		}
+		baselineRecord = &converted
+	}
+	return store.RecordMaintenanceRun(record, baselineRecord)
+}
+
+func systemRecordFromSnapshot(snapshot HealthSnapshot) (systemdb.MaintenanceRecord, error) {
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return systemdb.MaintenanceRecord{}, err
+	}
+	processes := make(map[string]systemdb.ProcessRecord, len(snapshot.Processes))
+	for id, proc := range snapshot.Processes {
+		processes[id] = systemdb.ProcessRecord{
+			Name:    proc.Name,
+			PIDFile: proc.PIDFile,
+			Running: proc.Running,
+			Owned:   proc.Owned,
+			Action:  proc.Action,
+			Message: proc.Message,
+		}
+	}
+	return systemdb.MaintenanceRecord{
+		Timestamp:             snapshot.Timestamp,
+		Score:                 snapshot.Score,
+		Summary:               snapshot.Summary,
+		Baseline:              snapshot.Baseline,
+		Deferred:              snapshot.Deferred,
+		ComparedTo:            snapshot.ComparedTo,
+		Recommendations:       append([]string(nil), snapshot.Recommendations...),
+		Processes:             processes,
+		LastRemediationAt:     snapshot.LastRemediationAt,
+		LastRemediationAction: snapshot.LastRemediationAction,
+		PayloadJSON:           string(payload),
+	}, nil
+}
+
 func summarizeScore(score int) string {
 	switch {
 	case score >= 90:
@@ -463,14 +542,34 @@ func summarizeScore(score int) string {
 	}
 }
 
-func (s *Service) shouldDeferMaintenance(stats CheapCognitionSnapshot, activeProbe bool) bool {
+func (s *Service) shouldDeferMaintenance(stats CheapCognitionSnapshot, previous *HealthSnapshot, activeProbe bool) (bool, string) {
 	if activeProbe || s.cfg.BusyWindowMinutes <= 0 {
-		return false
+		return false, ""
 	}
-	if stats.LastDecisionAt.IsZero() {
-		return false
+
+	window := time.Duration(s.cfg.BusyWindowMinutes) * time.Minute
+	if !stats.LastDecisionAt.IsZero() && time.Since(stats.LastDecisionAt) < window {
+		return true, "Maintenance actions deferred because the runtime was recently active"
 	}
-	return time.Since(stats.LastDecisionAt) < time.Duration(s.cfg.BusyWindowMinutes)*time.Minute
+	if previous == nil || previous.Timestamp.IsZero() {
+		return false, ""
+	}
+
+	age := time.Since(previous.Timestamp)
+	if age > window*2 {
+		return false, ""
+	}
+
+	prevStats := previous.CheapCognition
+	deltaCalls := deltaCounter(stats.ClassificationCalls, prevStats.ClassificationCalls)
+	deltaHandled := deltaCounter(stats.Forwarded, prevStats.Forwarded) + deltaCounter(stats.Skipped, prevStats.Skipped)
+	deltaFails := deltaCounter(stats.ClassificationFails, prevStats.ClassificationFails)
+
+	if deltaCalls >= 12 || deltaHandled >= 10 || deltaFails >= int64(maxInt(2, s.cfg.MaxCheapFailures)) {
+		return true, "Maintenance actions deferred because the runtime is under sustained recent load"
+	}
+
+	return false, ""
 }
 
 func (s *Service) restartBackoffActive(previous *HealthSnapshot) (bool, string) {
@@ -680,6 +779,20 @@ func envOrDefault(key, fallback string) string {
 
 func minInt64(a, b int64) int64 {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func deltaCounter(current, previous int64) int64 {
+	if current <= previous {
+		return 0
+	}
+	return current - previous
+}
+
+func maxInt(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b

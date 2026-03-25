@@ -12,6 +12,8 @@ It is meant to answer practical questions such as:
 ## Start Here
 - [Installation And Bootstrap](./installation-and-bootstrap.md)
 - [Startup And Daily Use](./startup-and-daily-use.md)
+- [Dashboard And Operator Usage](./dashboard-and-operator-usage.md)
+- [Brain Runtime Operations](./brain-runtime-operations.md)
 - [OpenClaw Bridge](./openclaw-bridge.md)
 - [Observer And Self-Care](./observer-and-self-care.md)
 - [Troubleshooting](./troubleshooting.md)
@@ -19,7 +21,7 @@ It is meant to answer practical questions such as:
 ## Position In The Docs
 - Use this knowledge base for operational guidance and user workflows.
 - Use [../TECHNICAL_GUIDE.md](../TECHNICAL_GUIDE.md) for architecture and runtime design.
-- Use [../design/observer-control-plane.html](../design/observer-control-plane.html) for the interactive observer/control-plane blueprint.
+- Use [../../ui/dashboard/observer.html](../../ui/dashboard/observer.html) for the interactive observer/control-plane blueprint.
 
 ## Current Scope
 This knowledge base documents both:

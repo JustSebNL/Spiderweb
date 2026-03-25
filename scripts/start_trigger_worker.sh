@@ -14,6 +14,11 @@ if [ ! -d "$TRIGGER_DIR" ]; then
   exit 1
 fi
 
+if [ ! -f "$TRIGGER_DIR/package.json" ]; then
+  echo "[ERROR] Trigger workspace is missing package.json at $TRIGGER_DIR" >&2
+  exit 1
+fi
+
 if [ -f "$TRIGGER_PID_FILE" ] && kill -0 "$(cat "$TRIGGER_PID_FILE")" 2>/dev/null; then
   echo "[INFO] Trigger worker is already running"
   exit 0

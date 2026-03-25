@@ -32,8 +32,16 @@ This package is now wired into a real Spiderweb path:
 - the OpenClaw intake forward path classifies inbound messages before forwarding
 - forwarded payload metadata now carries cheap-cognition priority/category/summary fields
 - low-priority non-escalations can be skipped before they reach OpenClaw
+- inbound local-processing messages are now enriched before the agent loop runs
+- local agent prompts now receive a compact intake triage note when cheap cognition succeeds
+- degraded intake notes are injected when cheap cognition is unavailable
 
 ## Current limitation
-Cheap cognition is not yet wired across all intake and routing paths.
+Cheap cognition is still not a first-class routing engine.
 
-That means the next implementation step is broader integration, not redesign.
+Current scope is enrichment:
+- forwarding metadata
+- degraded/fallback metadata
+- compact local intake notes
+
+It is not yet deciding broader multi-route outcomes beyond the OpenClaw forward path.

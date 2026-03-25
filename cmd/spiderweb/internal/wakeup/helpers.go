@@ -1,4 +1,4 @@
-package onboard
+package wakeup
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/JustSebNL/Spiderweb/pkg/config"
 )
 
-func onboard() {
+func runWakeup() {
 	configPath := internal.GetConfigPath()
 
 	if _, err := os.Stat(configPath); err == nil {

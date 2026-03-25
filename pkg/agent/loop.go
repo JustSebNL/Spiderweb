@@ -12,19 +12,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
+	"github.com/JustSebNL/Spiderweb/pkg/agentdb"
 	"github.com/JustSebNL/Spiderweb/pkg/bus"
 	"github.com/JustSebNL/Spiderweb/pkg/channels"
 	"github.com/JustSebNL/Spiderweb/pkg/cognition"
 	"github.com/JustSebNL/Spiderweb/pkg/config"
-	"github.com/JustSebNL/Spiderweb/pkg/maintenance"
 	"github.com/JustSebNL/Spiderweb/pkg/constants"
 	"github.com/JustSebNL/Spiderweb/pkg/logger"
+	"github.com/JustSebNL/Spiderweb/pkg/maintenance"
 	"github.com/JustSebNL/Spiderweb/pkg/providers"
 	"github.com/JustSebNL/Spiderweb/pkg/routing"
 	"github.com/JustSebNL/Spiderweb/pkg/skills"
@@ -34,13 +36,13 @@ import (
 )
 
 type AgentLoop struct {
-	bus            *bus.MessageBus
-	cfg            *config.Config
-	registry       *AgentRegistry
-	state          *state.Manager
-	running        atomic.Bool
-	summarizing    sync.Map
-	fallback       *providers.FallbackChain
+	bus                   *bus.MessageBus
+	cfg                   *config.Config
+	registry              *AgentRegistry
+	state                 *state.Manager
+	running               atomic.Bool
+	summarizing           sync.Map
+	fallback              *providers.FallbackChain
 	channelManager        *channels.Manager
 	inboundValve          *inboundValve
 	forwardURL            string
@@ -53,6 +55,7 @@ type AgentLoop struct {
 	cheapLastLatencyMS    atomic.Int64
 	cheapLastDecisionUnix atomic.Int64
 	cheapLastError        atomic.Value
+	agentStore            *agentdb.Store
 }
 
 // processOptions configures how a message is processed
@@ -110,10 +113,19 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		} else {
 			cheapClient = client
 			logger.InfoCF("agent", "Cheap cognition enabled", map[string]any{
-				"runtime": cfg.Intake.CheapCognition.Runtime,
+				"runtime":  cfg.Intake.CheapCognition.Runtime,
 				"base_url": cfg.Intake.CheapCognition.BaseURL,
-				"model": cfg.Intake.CheapCognition.Model,
+				"model":    cfg.Intake.CheapCognition.Model,
 			})
+		}
+	}
+
+	var agentStore *agentdb.Store
+	if cfg != nil {
+		if store, err := agentdb.Open(resolveAgentDBPath(cfg)); err != nil {
+			logger.WarnCF("agent", "Agent presence recorder unavailable", map[string]any{"error": err.Error()})
+		} else {
+			agentStore = store
 		}
 	}
 
@@ -128,6 +140,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		forwardURL:     fwdURL,
 		forwardClient:  fwdClient,
 		cheapCognition: cheapClient,
+		agentStore:     agentStore,
 	}
 }
 
@@ -238,6 +251,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 		if !ok {
 			return nil
 		}
+		msg = al.enrichInboundMessage(ctx, msg)
 
 		if al.forwardURL != "" {
 			al.forwardMessage(ctx, msg)
@@ -273,6 +287,25 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 	return nil
 }
 
+func (al *AgentLoop) enrichInboundMessage(ctx context.Context, msg bus.InboundMessage) bus.InboundMessage {
+	if al == nil || al.cheapCognition == nil {
+		return msg
+	}
+	if msg.Metadata == nil {
+		msg.Metadata = map[string]string{}
+	}
+	if _, exists := msg.Metadata["routing_mode"]; exists {
+		return msg
+	}
+
+	result, decision, status, classifyErr := al.classifyForwardMessage(ctx, msg)
+	if status == "disabled" {
+		return msg
+	}
+	msg.Metadata = annotateForwardMetadata(msg.Metadata, result, decision, status, classifyErr)
+	return msg
+}
+
 func (al *AgentLoop) Stop() {
 	al.running.Store(false)
 }
@@ -280,6 +313,15 @@ func (al *AgentLoop) Stop() {
 // forwardMessage sends a filtered intake message to OpenClaw's valve endpoint.
 // This is the core of the "Spiderweb collects, OpenClaw reasons" model.
 func (al *AgentLoop) forwardMessage(ctx context.Context, msg bus.InboundMessage) {
+	if blocked, reason := al.forwardBlockReason(msg); blocked {
+		logger.InfoCF("agent", "Forward to OpenClaw skipped by route policy", map[string]any{
+			"channel": msg.Channel,
+			"chat_id": msg.ChatID,
+			"reason":  reason,
+		})
+		return
+	}
+
 	metadata := cloneMetadata(msg.Metadata)
 	payload := map[string]any{
 		"channel":     msg.Channel,
@@ -292,23 +334,22 @@ func (al *AgentLoop) forwardMessage(ctx context.Context, msg bus.InboundMessage)
 		payload["media"] = msg.Media
 	}
 
-	if result, decision, ok := al.classifyForwardMessage(ctx, msg); ok {
-		metadata["cheap_cognition_priority"] = result.Priority
-		metadata["cheap_cognition_category"] = result.Category
-		metadata["cheap_cognition_escalation_needed"] = fmt.Sprintf("%t", result.EscalationNeeded)
-		metadata["cheap_cognition_summary"] = result.OneLineSummary
-		if decision == "skip" {
-			metadata["intake_forward_decision"] = "skip"
-			al.cheapSkipped.Add(1)
-			logger.InfoCF("agent", "Cheap cognition skipped OpenClaw forward", map[string]any{
-				"channel": msg.Channel,
-				"chat_id": msg.ChatID,
-				"priority": result.Priority,
-				"category": result.Category,
-			})
-			return
+	if _, exists := metadata["routing_mode"]; !exists {
+		if result, decision, status, classifyErr := al.classifyForwardMessage(ctx, msg); status != "disabled" {
+			metadata = annotateForwardMetadata(metadata, result, decision, status, classifyErr)
 		}
-		metadata["intake_forward_decision"] = "forward"
+	}
+	if metadata["intake_forward_decision"] == "skip" {
+		al.cheapSkipped.Add(1)
+		logger.InfoCF("agent", "Cheap cognition skipped OpenClaw forward", map[string]any{
+			"channel":  msg.Channel,
+			"chat_id":  msg.ChatID,
+			"priority": metadata["cheap_cognition_priority"],
+			"category": metadata["cheap_cognition_category"],
+		})
+		return
+	}
+	if metadata["intake_forward_decision"] == "forward" {
 		al.cheapForwarded.Add(1)
 	}
 	if len(metadata) > 0 {
@@ -351,6 +392,67 @@ func (al *AgentLoop) forwardMessage(ctx context.Context, msg bus.InboundMessage)
 		"chat_id": msg.ChatID,
 		"status":  resp.StatusCode,
 	})
+}
+
+func (al *AgentLoop) forwardBlockReason(msg bus.InboundMessage) (bool, string) {
+	if al == nil || al.cfg == nil {
+		return false, ""
+	}
+	if strings.EqualFold(strings.TrimSpace(msg.Channel), "openclaw") {
+		return true, "openclaw_loop_prevented"
+	}
+
+	intake := al.cfg.Intake
+	channel := strings.TrimSpace(msg.Channel)
+	if blocked, reason := matchRoutePolicy(channel, intake.ForwardAllowChannels, intake.ForwardDenyChannels, "channel"); blocked {
+		return true, reason
+	}
+
+	service := extractForwardService(msg.Metadata)
+	if blocked, reason := matchRoutePolicy(service, intake.ForwardAllowServices, intake.ForwardDenyServices, "service"); blocked {
+		return true, reason
+	}
+	return false, ""
+}
+
+func extractForwardService(metadata map[string]string) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	for _, key := range []string{"service", "service_name", "source_service", "pipeline", "pipeline_id"} {
+		if value := strings.TrimSpace(metadata[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func matchRoutePolicy(value string, allow, deny []string, label string) (bool, string) {
+	normalizedValue := normalizeRouteToken(value)
+	if normalizedValue != "" && containsRouteToken(deny, normalizedValue) {
+		return true, fmt.Sprintf("%s_denied", label)
+	}
+	if len(allow) > 0 && !containsRouteToken(allow, normalizedValue) {
+		return true, fmt.Sprintf("%s_not_allowed", label)
+	}
+	return false, ""
+}
+
+func containsRouteToken(values []string, target string) bool {
+	target = normalizeRouteToken(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if normalizeRouteToken(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeRouteToken(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func (al *AgentLoop) RegisterTool(tool tools.Tool) {
@@ -471,6 +573,7 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 			"session_key": sessionKey,
 			"matched_by":  route.MatchedBy,
 		})
+	al.recordAgentPresence(agent, msg)
 
 	enableSummary := false
 	if al.cfg != nil {
@@ -481,11 +584,88 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		SessionKey:      sessionKey,
 		Channel:         msg.Channel,
 		ChatID:          msg.ChatID,
-		UserMessage:     msg.Content,
+		UserMessage:     buildInboundUserMessage(msg),
 		DefaultResponse: "I've completed processing but have no response to give.",
 		EnableSummary:   enableSummary,
 		SendResponse:    false,
 	})
+}
+
+func buildInboundUserMessage(msg bus.InboundMessage) string {
+	if len(msg.Metadata) == 0 {
+		return msg.Content
+	}
+
+	switch strings.TrimSpace(msg.Metadata["routing_mode"]) {
+	case "cheap_cognition":
+		priority := fallbackField(msg.Metadata["cheap_cognition_priority"], "unknown")
+		category := fallbackField(msg.Metadata["cheap_cognition_category"], "unknown")
+		summary := strings.TrimSpace(msg.Metadata["cheap_cognition_summary"])
+		note := fmt.Sprintf("[Intake triage: priority=%s category=%s", priority, category)
+		if summary != "" {
+			note += fmt.Sprintf(" summary=%q", summary)
+		}
+		note += "]\n\n"
+		return note + msg.Content
+	case "degraded":
+		reason := fallbackField(msg.Metadata["fallback_reason"], "cheap cognition unavailable")
+		return fmt.Sprintf("[Intake degraded mode: %s]\n\n%s", reason, msg.Content)
+	default:
+		return msg.Content
+	}
+}
+
+func (al *AgentLoop) recordAgentPresence(agent *AgentInstance, msg bus.InboundMessage) {
+	if al == nil || al.agentStore == nil || agent == nil {
+		return
+	}
+	summary := utils.Truncate(strings.TrimSpace(msg.Content), 120)
+	pipelineID := extractForwardService(msg.Metadata)
+	if pipelineID == "" {
+		pipelineID = strings.TrimSpace(msg.Channel)
+	}
+	now := time.Now().UTC()
+	if err := al.agentStore.RecordPresence(agentdb.AgentPresence{
+		AgentID:         agent.ID,
+		AgentName:       firstNonEmpty(agent.Name, agent.ID),
+		PipelineID:      pipelineID,
+		State:           "busy",
+		Status:          "busy",
+		Channel:         msg.Channel,
+		ChatID:          msg.ChatID,
+		LastTaskSummary: summary,
+		LastSeenAt:      now,
+		UpdatedAt:       now,
+	}); err != nil {
+		logger.WarnCF("agent", "Failed to record agent presence", map[string]any{
+			"agent_id": agent.ID,
+			"error":    err.Error(),
+		})
+	}
+}
+
+func resolveAgentDBPath(cfg *config.Config) string {
+	healthFile := ""
+	if cfg != nil {
+		healthFile = strings.TrimSpace(cfg.Maintenance.HealthFile)
+	}
+	if healthFile == "" && cfg != nil {
+		healthFile = filepath.Join(cfg.WorkspacePath(), "state", "runtime-health.json")
+	}
+	healthFile = expandHome(healthFile)
+	if healthFile == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(healthFile), "agent.db")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMessage) (string, error) {
@@ -1190,9 +1370,9 @@ func (al *AgentLoop) estimateTokens(messages []providers.Message) int {
 func (al *AgentLoop) classifyForwardMessage(
 	ctx context.Context,
 	msg bus.InboundMessage,
-) (*cognition.ClassificationResult, string, bool) {
+) (*cognition.ClassificationResult, string, string, error) {
 	if al == nil || al.cheapCognition == nil {
-		return nil, "", false
+		return nil, "", "disabled", nil
 	}
 
 	al.cheapCalls.Add(1)
@@ -1218,11 +1398,11 @@ func (al *AgentLoop) classifyForwardMessage(
 		al.cheapLastDecisionUnix.Store(time.Now().Unix())
 		al.cheapLastError.Store(err.Error())
 		logger.WarnCF("agent", "Cheap cognition classify failed", map[string]any{
-			"error": err.Error(),
+			"error":   err.Error(),
 			"channel": msg.Channel,
 			"chat_id": msg.ChatID,
 		})
-		return nil, "", false
+		return nil, "", "unavailable", err
 	}
 
 	al.cheapLastLatencyMS.Store(time.Since(startedAt).Milliseconds())
@@ -1234,7 +1414,7 @@ func (al *AgentLoop) classifyForwardMessage(
 		decision = "skip"
 	}
 
-	return result, decision, true
+	return result, decision, "ok", nil
 }
 
 func (al *AgentLoop) CheapCognitionSnapshot() maintenance.CheapCognitionSnapshot {
@@ -1263,6 +1443,46 @@ func cloneMetadata(metadata map[string]string) map[string]string {
 		cloned[k] = v
 	}
 	return cloned
+}
+
+func annotateForwardMetadata(
+	metadata map[string]string,
+	result *cognition.ClassificationResult,
+	decision string,
+	status string,
+	classifyErr error,
+) map[string]string {
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	switch status {
+	case "ok":
+		if result == nil {
+			return metadata
+		}
+		metadata["routing_mode"] = "cheap_cognition"
+		metadata["cheap_cognition"] = "available"
+		metadata["cheap_cognition_priority"] = result.Priority
+		metadata["cheap_cognition_category"] = result.Category
+		metadata["cheap_cognition_escalation_needed"] = fmt.Sprintf("%t", result.EscalationNeeded)
+		metadata["cheap_cognition_summary"] = result.OneLineSummary
+		metadata["intake_forward_decision"] = decision
+	case "unavailable":
+		metadata["routing_mode"] = "degraded"
+		metadata["cheap_cognition"] = "unavailable"
+		metadata["intake_forward_decision"] = "forward_degraded"
+		if classifyErr != nil {
+			metadata["fallback_reason"] = classifyErr.Error()
+		}
+	}
+	return metadata
+}
+
+func fallbackField(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
 }
 
 func stringMapToAnyMap(metadata map[string]string) map[string]any {

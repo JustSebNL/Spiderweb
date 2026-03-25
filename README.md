@@ -129,6 +129,14 @@ Bridge endpoints exposed by the gateway:
 - `/valve/state`
 - `/bridge/openclaw`
 
+Optional intake route filters:
+- `intake.forward_allow_channels`
+- `intake.forward_deny_channels`
+- `intake.forward_allow_services`
+- `intake.forward_deny_services`
+
+Use these when only specific channels or service sources should forward into the OpenClaw path.
+
 The transfer flow is:
 1. Spiderweb checks gateway health
 2. Spiderweb checks valve state
@@ -172,7 +180,7 @@ Give your decade-old phone a second life! Turn it into a smart AI Assistant with
 wget https://github.com/JustSebNL/Spiderweb/releases/download/v0.1.1/spiderweb-linux-arm64
 chmod +x spiderweb-linux-arm64
 pkg install proot
-termux-chroot ./spiderweb-linux-arm64 onboard
+termux-chroot ./spiderweb-linux-arm64 wakeup
 ```
 
 And then follow the instructions in the "Quick Start" section to complete the configuration!
@@ -275,7 +283,7 @@ sweb wakeup
 **1. Initialize**
 
 ```bash
-spiderweb onboard
+sweb wakeup
 ```
 
 **2. Configure** (`~/.spiderweb/config.json`)
@@ -666,7 +674,7 @@ Spiderweb stores data in your configured workspace (default: `~/.spiderweb/works
 └── USER.md           # User preferences
 ```
 
-On first run of `spiderweb onboard`, agent profiles found in `agents/` are copied into the workspace and registered in `agents.list` (with IDs derived from filenames, e.g. `spiderweb-supervisor.md` → `supervisor`).
+On first run of `sweb wakeup`, agent profiles found in `agents/` are copied into the workspace and registered in `agents.list` (with IDs derived from filenames, e.g. `spiderweb-supervisor.md` → `supervisor`).
 
 ### 🔒 Security Sandbox
 
@@ -1174,7 +1182,7 @@ spiderweb agent -m "Hello"
 
 | Command                   | Description                   |
 | ------------------------- | ----------------------------- |
-| `spiderweb onboard`        | Initialize config & workspace |
+| `sweb wakeup`              | Initialize config & workspace |
 | `spiderweb agent -m "..."` | Chat with the agent           |
 | `spiderweb agent`          | Interactive chat mode         |
 | `spiderweb gateway`        | Start the gateway             |

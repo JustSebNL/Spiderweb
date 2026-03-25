@@ -55,8 +55,8 @@ Runtime selection:
 Important files:
 - `pkg/cognition/client.go`
 - `pkg/agent/loop.go`
-- `scripts/start_youtu_vllm.sh`
-- `scripts/stop_youtu_vllm.sh`
+- `scripts/start_brain_vllm.sh`
+- `scripts/stop_brain_vllm.sh`
 
 ## 3. Gateway And Endpoints
 
@@ -120,7 +120,7 @@ Current maintenance behaviors:
 Important files:
 - `pkg/maintenance/service.go`
 - `docs/cookbook/runtime-maintenance.md`
-- `docs/design/observer-control-plane.html`
+- `ui/dashboard/observer.html`
 
 ### Control-plane direction
 
@@ -130,9 +130,11 @@ The next architectural layer above maintenance is a system-wide observer/control
 - dashboard reads from observer state rather than scraping each service directly
 - benchmark history should preserve startup baseline, pre-care check, and post-care result
 - persistence should be split between `system.db` and `agent.db`
+- long-lived orchestration should sit in Trigger.dev when needed
+- isolated risky execution should sit in E2B sandboxes when needed
 
 Interactive design reference:
-- [Observer Control Plane](./design/observer-control-plane.html)
+- [Observer Control Plane](../ui/dashboard/observer.html)
 - [Observer Control Plane Design](./design/observer-control-plane.md)
 
 ## 6. Pipeline Checks
@@ -170,7 +172,7 @@ Useful files:
 ## 7. Command Surface
 
 Top-level command groups:
-- `onboard`
+- `wakeup`
 - `agent`
 - `auth`
 - `gateway`
@@ -208,13 +210,29 @@ This is aligned with the project direction:
 Trigger.dev is optional.
 
 If used, it should:
-- reuse native Spiderweb runtime helpers
-- stay out of the required install/start path
-- not replace the native model/runtime architecture
+- own long-lived workflow orchestration
+- host durable pipeline-manager style agents
+- drive schedules, retries, and fan-out
+- call back into Spiderweb or E2B rather than replacing local operator truth
 
 It must not become a second required orchestration plane for core local use.
 
-## 10. Current Known Gaps
+## 10. E2B Sandboxes
+
+E2B is the preferred isolation layer for bounded execution tasks.
+
+If used, it should:
+- sandbox risky code execution
+- sandbox shell/file/process-heavy sub-tasks
+- return structured results back to the orchestrating layer
+- not be treated as the permanent home of always-on agents or operator services
+
+Practical split:
+- Trigger.dev for long-lived orchestration
+- E2B for isolated execution
+- local Spiderweb for operator truth, observer state, and dashboard
+
+## 11. Current Known Gaps
 
 These are important current truths:
 - Youtu-specific `vLLM` patch files are still missing under `infra/vllm/patches/`

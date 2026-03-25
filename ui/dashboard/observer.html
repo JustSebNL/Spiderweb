@@ -1,0 +1,4529 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spiderweb Observer Control Plane</title>
+  <style>
+    :root {
+      --bg-0: #070707;
+      --bg-1: #101011;
+      --bg-2: #181517;
+      --panel: rgba(255, 255, 255, 0.06);
+      --panel-soft: rgba(255, 255, 255, 0.02);
+      --panel-edge: rgba(255, 255, 255, 0.18);
+      --text: #fff7f1;
+      --muted: #d8d1cf;
+      --core: #ffb84f;
+      --care: #ff7448;
+      --log: #ffe173;
+      --wood: #8f4227;
+      --wood-dark: #4f2016;
+      --header-brown: #b97a62;
+      --good: #ffd36b;
+      --warn: #ff9c56;
+      --bad: #ff6147;
+      --idle: #ffcf91;
+      --glow-fire: 0 0 22px rgba(255, 145, 85, 0.1);
+      --glow-gold: 0 0 14px rgba(255, 198, 107, 0.07);
+      --glow-wood: 0 0 10px rgba(185, 122, 98, 0.08);
+      --shadow: 0 28px 72px rgba(0, 0, 0, 0.34);
+      --radius-xl: 30px;
+      --radius-lg: 22px;
+      --radius-md: 18px;
+      --radius-sm: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      min-height: 100%;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", Arial, sans-serif;
+      background:
+        linear-gradient(180deg, rgba(7, 7, 7, 0.7), rgba(16, 16, 17, 0.78) 45%, rgba(24, 21, 23, 0.88) 100%),
+        linear-gradient(115deg, rgba(255, 162, 82, 0.08), transparent 28%, rgba(255, 89, 71, 0.08) 72%, transparent),
+        radial-gradient(circle at 16% 10%, rgba(176, 76, 255, 0.32), transparent 18%),
+        radial-gradient(circle at 50% 92%, rgba(255, 78, 72, 0.22), transparent 24%),
+        radial-gradient(circle at 86% 88%, rgba(255, 216, 84, 0.22), transparent 18%),
+        url("../backgrounds/observer-background.png") right center / cover no-repeat,
+        linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(115deg, rgba(255, 255, 255, 0.025), transparent 32%, rgba(255, 255, 255, 0.018) 68%, transparent),
+        radial-gradient(circle at top, rgba(255, 241, 223, 0.06), transparent 22%);
+      pointer-events: none;
+    }
+
+    a {
+      color: #ffca8d;
+    }
+
+    .shell {
+      max-width: 1420px;
+      margin: 0 auto;
+      padding: 32px 22px 60px;
+    }
+
+    .browser-bar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--panel-edge);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+        linear-gradient(180deg, rgba(42, 32, 27, 0.16), rgba(16, 12, 10, 0.24));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      margin-bottom: 18px;
+    }
+
+    .traffic {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .traffic .status-light {
+      appearance: none;
+      -webkit-appearance: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
+      position: relative;
+      cursor: help;
+      color: var(--muted);
+      font-size: 0.76rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font: inherit;
+      transition: border-color 180ms ease, background 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+
+    .traffic .status-light::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 10px);
+      transform: translateX(-50%) translateY(4px);
+      white-space: nowrap;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03)),
+        linear-gradient(180deg, rgba(18, 16, 18, 0.94), rgba(8, 8, 10, 0.96));
+      color: var(--text);
+      font-size: 0.76rem;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
+      pointer-events: none;
+      z-index: 20;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+    }
+
+    .traffic .status-light:hover,
+    .traffic .status-light:focus-visible {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .traffic .status-light:hover::after,
+    .traffic .status-light:focus-visible::after {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .traffic .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      flex: 0 0 auto;
+      background: rgba(255, 255, 255, 0.3);
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.14);
+    }
+
+    .traffic .status-label {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .traffic .status-name {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .traffic .status-value {
+      color: var(--muted);
+      opacity: 0.9;
+    }
+
+    .traffic .status-light.good .status-dot { background: #62cc7f; box-shadow: 0 0 12px rgba(98, 204, 127, 0.28); }
+    .traffic .status-light.warn .status-dot { background: #f8c04e; box-shadow: 0 0 12px rgba(248, 192, 78, 0.26); }
+    .traffic .status-light.bad .status-dot { background: #ff6f64; box-shadow: 0 0 12px rgba(255, 111, 100, 0.3); }
+    .traffic .status-light.idle .status-dot { background: #ffcf91; box-shadow: 0 0 12px rgba(255, 207, 145, 0.24); }
+
+    .url-pill {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      padding: 11px 18px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.94rem;
+      letter-spacing: 0.02em;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+    }
+
+    .url-pill:hover,
+    .url-pill:focus-visible {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      outline: none;
+    }
+
+    .browser-actions {
+      display: flex;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .browser-action {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.05);
+      color: inherit;
+      position: relative;
+      cursor: pointer;
+      font: inherit;
+      transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
+    }
+
+    .browser-action:hover,
+    .browser-action:focus-visible {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(255, 255, 255, 0.16);
+      color: var(--text);
+      outline: none;
+    }
+
+    .browser-action::after {
+      content: attr(data-tip);
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 10px);
+      transform: translateY(4px);
+      white-space: nowrap;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03)),
+        linear-gradient(180deg, rgba(18, 16, 18, 0.94), rgba(8, 8, 10, 0.96));
+      color: var(--text);
+      font-size: 0.76rem;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
+      pointer-events: none;
+      z-index: 20;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+    }
+
+    .browser-action:hover::after,
+    .browser-action:focus-visible::after {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: 84px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .rail,
+    .board,
+    .glass {
+      border: 1px solid var(--panel-edge);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .rail::before,
+    .board::before,
+    .glass::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.04), transparent 22%);
+      pointer-events: none;
+    }
+
+    .rail {
+      padding: 18px 12px;
+      border-radius: 26px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+        linear-gradient(180deg, rgba(24, 22, 24, 0.16), rgba(10, 10, 11, 0.22));
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+      position: sticky;
+      top: 22px;
+    }
+
+    .rail .logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      display: grid;
+      place-items: center;
+      font-size: 1.15rem;
+      box-shadow: var(--glow-fire);
+    }
+
+    .rail-btn {
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+      font-size: 1rem;
+      transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
+    }
+
+    .rail-btn:hover,
+    .rail-btn.active {
+      transform: translateY(-2px);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+      border-color: rgba(255, 255, 255, 0.16);
+      color: var(--text);
+      box-shadow: var(--glow-fire);
+    }
+
+    .board {
+      border-radius: var(--radius-xl);
+      padding: 26px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+        linear-gradient(180deg, rgba(43, 33, 27, 0.14), rgba(17, 12, 10, 0.22));
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 0.74rem;
+      color: var(--header-brown);
+      text-shadow: var(--glow-wood);
+      margin-bottom: 10px;
+    }
+
+    .hero h1,
+    .section-head h2,
+    .profile-card h2,
+    .glass h3 {
+      margin: 0;
+      letter-spacing: -0.03em;
+      line-height: 1.06;
+      color: #fff3e8;
+      text-shadow: var(--glow-wood);
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      margin-bottom: 10px;
+    }
+
+    .hero p,
+    .muted,
+    .glass p,
+    .glass li,
+    .mini,
+    .meta-line {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .hero p {
+      max-width: 65ch;
+      margin: 0 0 16px;
+    }
+
+    .chip-row,
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip,
+    .btn,
+    .menu-toggle,
+    .status-pill {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 9px 13px;
+      font: inherit;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .chip {
+      font-size: 0.92rem;
+    }
+
+    .btn,
+    .menu-toggle {
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .btn:hover,
+    .btn:focus-visible,
+    .menu-toggle:hover,
+    .menu-toggle:focus-visible,
+    .status-pill:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: var(--glow-gold);
+      outline: none;
+    }
+
+    .btn.active {
+      background:
+        linear-gradient(135deg, rgba(255, 184, 79, 0.1), rgba(255, 116, 72, 0.04) 55%, rgba(255, 255, 255, 0.1));
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .glass {
+      border-radius: var(--radius-lg);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+        linear-gradient(180deg, rgba(42, 32, 27, 0.08), rgba(18, 12, 10, 0.14));
+      padding: 18px;
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .glass:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255, 255, 255, 0.16);
+      box-shadow: 0 22px 48px rgba(0, 0, 0, 0.28);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
+        linear-gradient(180deg, rgba(50, 38, 31, 0.1), rgba(20, 14, 12, 0.16));
+    }
+
+    .profile-card {
+      display: grid;
+      gap: 16px;
+      overflow: visible;
+      z-index: 12;
+    }
+
+    .profile-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .avatar-wrap {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .avatar {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 30%, rgba(255, 220, 162, 0.5), transparent 22%),
+        linear-gradient(180deg, rgba(255, 184, 79, 0.8), rgba(255, 97, 71, 0.72));
+      border: 2px solid rgba(255, 225, 176, 0.22);
+      box-shadow: var(--glow-gold);
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+      align-items: start;
+    }
+
+    .gauge-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+      align-items: start;
+    }
+
+    .gauge-card {
+      min-height: 200px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .gauge-shell {
+      position: relative;
+      width: 132px;
+      height: 132px;
+      margin: 0 auto;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, rgba(10, 10, 12, 0.92) 51%, transparent 53%),
+        conic-gradient(from 210deg, rgba(255,255,255,0.08) 0deg, rgba(255,255,255,0.08) 240deg, transparent 240deg 360deg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.22), var(--glow-fire);
+    }
+
+    .gauge-shell::before {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), transparent 26%),
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .gauge-arc {
+      --gauge-angle: 180deg;
+      --gauge-color-a: rgba(255, 184, 79, 0.95);
+      --gauge-color-b: rgba(255, 97, 71, 0.88);
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, transparent 58%, rgba(7, 7, 7, 0.92) 59%),
+        conic-gradient(from 210deg, var(--gauge-color-a) 0deg, var(--gauge-color-b) var(--gauge-angle), rgba(255,255,255,0.08) var(--gauge-angle) 240deg, transparent 240deg 360deg);
+      transition: background 280ms ease;
+      filter: drop-shadow(0 0 12px rgba(255, 148, 92, 0.2));
+    }
+
+    .gauge-center {
+      position: absolute;
+      inset: 28px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+        linear-gradient(180deg, rgba(17, 14, 15, 0.88), rgba(8, 8, 10, 0.94));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 2;
+    }
+
+    .gauge-value {
+      font-size: 1.55rem;
+      line-height: 1;
+      font-weight: 700;
+      color: #fff1e4;
+      letter-spacing: -0.04em;
+    }
+
+    .gauge-sub {
+      margin-top: 4px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .observer-banner {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 0.8fr));
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .observer-banner .mini-card {
+      min-height: 86px;
+      display: grid;
+      align-content: center;
+      gap: 6px;
+    }
+
+    .metric {
+      min-height: 128px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-bottom: 8px;
+    }
+
+    .metric .value {
+      font-size: 2.2rem;
+      line-height: 1;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.04em;
+    }
+
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .idle { color: var(--idle); }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 0.94fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .section-head,
+    .line-head,
+    .agent-head,
+    .menu-shell,
+    .timeline-item,
+    .rowline {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .section-head {
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+
+    .menu-shell {
+      justify-content: flex-end;
+      margin-bottom: 14px;
+      overflow: visible;
+    }
+
+    .menu {
+      position: relative;
+      overflow: visible;
+      z-index: 14;
+    }
+
+    .menu-toggle {
+      min-width: 52px;
+      min-height: 52px;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    .menu-toggle-label {
+      font-size: 0.92rem;
+      letter-spacing: 0.01em;
+    }
+
+    .burger {
+      width: 30px;
+      height: 22px;
+      display: inline-grid;
+      align-content: center;
+      gap: 5px;
+      position: relative;
+    }
+
+    .burger-line {
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 247, 241, 0.96);
+      transform-origin: center;
+      transition: transform 260ms ease, opacity 260ms ease, width 260ms ease, box-shadow 260ms ease;
+      box-shadow: 0 0 18px rgba(255, 184, 79, 0.18);
+    }
+
+    .menu.open .burger-line:nth-child(1) {
+      transform: translateY(9px) rotate(45deg);
+    }
+
+    .menu.open .burger-line:nth-child(2) {
+      opacity: 0;
+      width: 0;
+    }
+
+    .menu.open .burger-line:nth-child(3) {
+      transform: translateY(-9px) rotate(-45deg);
+    }
+
+    .menu-panel {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: 280px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+        linear-gradient(180deg, rgba(25, 22, 24, 0.32), rgba(10, 10, 11, 0.42));
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.48);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      padding: 12px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(10px) scale(0.98);
+      transition: opacity 180ms ease, visibility 180ms ease, transform 180ms ease;
+      z-index: 10;
+    }
+
+    .menu.open .menu-panel,
+    .menu:hover .menu-panel,
+    .menu:focus-within .menu-panel {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
+
+    .menu-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .menu-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      padding: 11px 12px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+    }
+
+    .menu-item:hover,
+    .menu-item:focus-visible {
+      transform: translateX(2px);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.16);
+      outline: none;
+    }
+
+    .menu-item span {
+      display: block;
+    }
+
+    .charts {
+      display: grid;
+      gap: 16px;
+    }
+
+    .task-shell {
+      display: grid;
+      gap: 14px;
+    }
+
+    .task-toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .task-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .task-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .task-stat {
+      padding: 9px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.045);
+      color: var(--muted);
+      font-size: 0.85rem;
+      letter-spacing: 0.02em;
+    }
+
+    .task-stat strong {
+      color: #fff4e8;
+      margin-right: 6px;
+    }
+
+    .task-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .task-filter {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      padding: 9px 13px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+    }
+
+    .task-filter:hover,
+    .task-filter:focus-visible,
+    .task-filter.active {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      outline: none;
+    }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) 98px;
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.055);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, opacity 180ms ease, filter 180ms ease;
+    }
+
+    .task-row.entering {
+      animation: taskFadeIn 320ms ease;
+    }
+
+    .task-row:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .task-row.running {
+      background: rgba(255, 255, 255, 0.038);
+      border-color: rgba(255, 255, 255, 0.07);
+      opacity: 0.66;
+      filter: saturate(0.58);
+    }
+
+    .task-row.running .task-meta,
+    .task-row.running .task-name,
+    .task-row.running .task-state-tag {
+      color: rgba(255, 247, 241, 0.64);
+    }
+
+    .task-row.done {
+      background: linear-gradient(180deg, rgba(22, 255, 211, 0.06), rgba(255, 255, 255, 0.03));
+      border-color: rgba(22, 255, 211, 0.22);
+      animation: taskDoneFlash 700ms ease;
+    }
+
+    .task-row.done .task-state-tag {
+      color: #83ffe8;
+    }
+
+    .task-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .task-check {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.14);
+      display: grid;
+      place-items: center;
+      position: relative;
+      color: transparent;
+      transform: scale(0.92);
+      transition: border-color 260ms ease, transform 260ms ease, box-shadow 260ms ease, color 260ms ease;
+    }
+
+    .task-check::before {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      opacity: 0;
+      transform: scale(0.7);
+      transition: opacity 280ms ease, transform 280ms ease, border-color 280ms ease;
+    }
+
+    .task-row.done .task-check {
+      color: #11efd3;
+      border-color: #11efd3;
+      box-shadow: 0 0 24px rgba(17, 239, 211, 0.24);
+      transform: scale(1);
+    }
+
+    .task-row.done .task-check::before {
+      opacity: 1;
+      transform: scale(1.16);
+      border-color: rgba(17, 239, 211, 0.3);
+    }
+
+    .task-check-mark {
+      font-size: 1.45rem;
+      line-height: 1;
+      transform: scale(0.2) rotate(-20deg);
+      opacity: 0;
+      transition: transform 280ms cubic-bezier(.2,.9,.2,1.1), opacity 240ms ease;
+    }
+
+    .task-row.done .task-check-mark {
+      transform: scale(1) rotate(0deg);
+      opacity: 1;
+    }
+
+    .task-body {
+      min-width: 0;
+    }
+
+    .task-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff0e7;
+      margin-bottom: 6px;
+    }
+
+    .task-meta {
+      color: var(--muted);
+      font-size: 0.86rem;
+      margin-bottom: 10px;
+    }
+
+    .task-context {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .task-state-tag {
+      font-size: 0.82rem;
+      color: #ffc98b;
+      letter-spacing: 0.02em;
+    }
+
+    .capsule-progress {
+      --fill: 50%;
+      --progress-color: rgba(255, 128, 61, 0.98);
+      position: relative;
+      height: 52px;
+      border-radius: 999px;
+      border: 2px solid rgba(255, 132, 24, 0.82);
+      background: rgba(255, 255, 255, 0.025);
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    }
+
+    .capsule-progress::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: var(--fill);
+      border-radius: inherit;
+      background:
+        linear-gradient(90deg, rgba(255, 146, 60, 0.34), rgba(255, 216, 117, 0.16));
+      transition: width 420ms ease;
+    }
+
+    .capsule-progress.running::before {
+      background:
+        linear-gradient(90deg, rgba(255, 146, 60, 0.34), rgba(255, 216, 117, 0.16)),
+        linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.16) 42%, transparent 70%);
+      background-size: auto, 180px 100%;
+      animation: progressDrift 2.4s linear infinite;
+    }
+
+    .capsule-progress::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: clamp(26px, var(--fill), calc(100% - 26px));
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(244, 244, 244, 0.92);
+      box-shadow: 0 0 0 8px rgba(255,255,255,0.06);
+      transform: translate(-50%, -50%);
+      transition: left 420ms ease;
+    }
+
+    .capsule-progress.running::after {
+      animation: knobPulse 1.8s ease-in-out infinite;
+    }
+
+    .capsule-progress.warning {
+      border-color: rgba(255, 132, 24, 0.9);
+    }
+
+    .capsule-progress.warning::after {
+      background: rgba(255, 244, 235, 0.95);
+    }
+
+    .capsule-progress.good {
+      border-color: rgba(17, 239, 211, 0.82);
+    }
+
+    .capsule-progress.good::before {
+      background: linear-gradient(90deg, rgba(17, 239, 211, 0.25), rgba(125, 255, 224, 0.12));
+    }
+
+    .capsule-progress.good::after {
+      background: rgba(17, 239, 211, 0.95);
+      box-shadow: 0 0 0 8px rgba(17, 239, 211, 0.08);
+    }
+
+    .capsule-progress.muted {
+      border-color: rgba(255,255,255,0.16);
+    }
+
+    .capsule-progress.muted::before {
+      background: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+    }
+
+    .capsule-progress.muted::after {
+      background: rgba(231, 231, 231, 0.84);
+      box-shadow: 0 0 0 8px rgba(255,255,255,0.04);
+    }
+
+    .task-side {
+      display: grid;
+      gap: 6px;
+      justify-items: end;
+      text-align: right;
+    }
+
+    .task-detail-btn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: #ffd39b;
+      font: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+      padding: 0;
+      transition: color 160ms ease, transform 160ms ease;
+    }
+
+    .task-detail-btn:hover,
+    .task-detail-btn:focus-visible {
+      color: #fff1de;
+      transform: translateX(2px);
+      outline: none;
+    }
+
+    .chart-card {
+      min-height: 310px;
+    }
+
+    .chart-surface {
+      height: 210px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+
+    .chart-surface::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to top, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 100% 34px, 72px 100%;
+      opacity: 0.35;
+    }
+
+    .line {
+      position: absolute;
+      inset: 0;
+    }
+
+    .line svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .line path {
+      fill: none;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 10px rgba(255, 132, 75, 0.18));
+    }
+
+    .line .a {
+      stroke: rgba(255, 184, 79, 0.95);
+    }
+
+    .line .b {
+      stroke: rgba(255, 241, 219, 0.8);
+      stroke-dasharray: 10 8;
+      stroke-width: 3;
+    }
+
+    .spark-tag {
+      position: absolute;
+      top: 48px;
+      left: 32%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      box-shadow: var(--glow-fire);
+    }
+
+    .lower-grid {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 16px;
+      margin-top: 16px;
+      align-items: start;
+    }
+
+    .goal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+      align-items: start;
+    }
+
+    .mini-card {
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 14px;
+      transition: transform 160ms ease, border-color 160ms ease;
+    }
+
+    .mini-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .ring-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .ring {
+      --ring-label: "65%";
+      width: 102px;
+      height: 102px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, rgba(31, 11, 8, 0.9) 48%, transparent 50%),
+        conic-gradient(var(--care) 0 220deg, rgba(255, 255, 255, 0.08) 220deg 360deg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: var(--glow-fire);
+      position: relative;
+    }
+
+    .ring::after {
+      content: var(--ring-label);
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .agent-grid {
+      display: grid;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .agent-card {
+      padding: 16px;
+    }
+
+    .service-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+      align-items: start;
+    }
+
+    .agent-filters,
+    .service-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 14px;
+    }
+
+    .panel-search {
+      width: 100%;
+      margin-top: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      padding: 10px 14px;
+      font: inherit;
+      outline: none;
+      transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .panel-search::placeholder {
+      color: rgba(255, 247, 241, 0.52);
+    }
+
+    .panel-search:focus {
+      border-color: rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: var(--glow-gold);
+    }
+
+    .agent-filter,
+    .service-filter {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+    }
+
+    .agent-filter:hover,
+    .agent-filter:focus-visible,
+    .agent-filter.active,
+    .service-filter:hover,
+    .service-filter:focus-visible,
+    .service-filter.active {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      outline: none;
+    }
+
+    .service-card {
+      padding: 15px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: transform 160ms ease, border-color 160ms ease;
+    }
+
+    .service-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .service-name {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #fff0e7;
+    }
+
+    .mini-meter {
+      --meter-fill: 50%;
+      --meter-a: rgba(255, 184, 79, 0.9);
+      --meter-b: rgba(255, 116, 72, 0.82);
+      position: relative;
+      height: 10px;
+      margin: 12px 0 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.045);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.025);
+    }
+
+    .mini-meter::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: var(--meter-fill);
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--meter-a), var(--meter-b));
+      transition: width 260ms ease;
+      box-shadow: 0 0 18px rgba(255, 148, 92, 0.18);
+    }
+
+    .mini-meter.good {
+      --meter-a: rgba(17, 239, 211, 0.82);
+      --meter-b: rgba(125, 255, 224, 0.72);
+    }
+
+    .mini-meter.idle {
+      --meter-a: rgba(255, 207, 145, 0.92);
+      --meter-b: rgba(255, 184, 79, 0.82);
+    }
+
+    .mini-meter.warn {
+      --meter-a: rgba(255, 156, 86, 0.92);
+      --meter-b: rgba(255, 97, 71, 0.88);
+    }
+
+    .mini-meter.bad {
+      --meter-a: rgba(255, 97, 71, 0.96);
+      --meter-b: rgba(196, 49, 39, 0.88);
+    }
+
+    .agent-name {
+      font-size: 1.02rem;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.8rem;
+      transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+    }
+
+    .badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 12px currentColor;
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+
+    .agent-card:hover .badge,
+    .profile-card:hover .badge {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .panel-state-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 2px;
+    }
+
+    .detail-trigger {
+      appearance: none;
+      margin-top: 12px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #ffd39b;
+      font: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: color 160ms ease, transform 160ms ease;
+    }
+
+    .detail-trigger:hover,
+    .detail-trigger:focus-visible {
+      color: #fff1de;
+      transform: translateX(2px);
+      outline: none;
+    }
+
+    .detail-drawer {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      width: min(420px, calc(100vw - 32px));
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+        linear-gradient(180deg, rgba(25, 22, 24, 0.28), rgba(10, 10, 11, 0.38));
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.48);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      padding: 18px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(16px);
+      transition: opacity 180ms ease, visibility 180ms ease, transform 180ms ease;
+      z-index: 30;
+    }
+
+    .detail-drawer.open {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .command-palette {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: start center;
+      padding-top: 90px;
+      background: rgba(5, 5, 7, 0.46);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 180ms ease, visibility 180ms ease;
+      z-index: 45;
+    }
+
+    .command-palette.open {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .command-shell {
+      width: min(680px, calc(100vw - 32px));
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03)),
+        linear-gradient(180deg, rgba(20, 16, 17, 0.9), rgba(9, 9, 11, 0.94));
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.42);
+      padding: 18px;
+    }
+
+    .command-input {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      padding: 14px 16px;
+      font: inherit;
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    .command-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .command-item {
+      appearance: none;
+      width: 100%;
+      text-align: left;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .command-item:hover,
+    .command-item:focus-visible,
+    .command-item.active {
+      transform: translateY(-1px);
+      border-color: rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.09);
+      outline: none;
+    }
+
+    .detail-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .detail-close {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .detail-close:hover,
+    .detail-close:focus-visible {
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .recommendation-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .recommendation-item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    .recommendation-mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: #fff0e7;
+      background: linear-gradient(180deg, rgba(255, 184, 79, 0.9), rgba(255, 116, 72, 0.82));
+      box-shadow: var(--glow-fire);
+      font-size: 0.8rem;
+    }
+
+    .timeline-item {
+      border-top: 1px solid rgba(255, 198, 128, 0.08);
+      padding-top: 10px;
+      align-items: flex-start;
+    }
+
+    .timeline-item .detail-trigger {
+      margin-top: 6px;
+    }
+
+    .timeline-item:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .toast-stage {
+      min-height: 250px;
+      display: grid;
+      align-items: end;
+    }
+
+    .toast-stack {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      width: min(420px, calc(100vw - 32px));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 40;
+      pointer-events: none;
+    }
+
+    .notif {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 14px;
+      border-radius: var(--radius-md);
+      padding: 14px;
+      border: 1px solid rgba(255, 198, 128, 0.12);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+      transition:
+        transform 220ms ease,
+        border-color 220ms ease,
+        opacity 220ms ease,
+        filter 220ms ease,
+        backdrop-filter 15000ms linear,
+        -webkit-backdrop-filter 15000ms linear,
+        box-shadow 15000ms linear;
+      pointer-events: auto;
+      backdrop-filter: blur(0);
+      -webkit-backdrop-filter: blur(0);
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+    }
+
+    .notif > * {
+      position: relative;
+      z-index: 2;
+    }
+
+    .notif::before,
+    .notif::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+    }
+
+    .notif::before {
+      z-index: 0;
+      opacity: 1;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.96), rgba(8, 8, 8, 0.98));
+      transition: opacity 15000ms linear;
+    }
+
+    .notif::after {
+      z-index: 1;
+      opacity: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 236, 214, 0.08), rgba(255, 236, 214, 0.02)),
+        linear-gradient(180deg, rgba(67, 28, 18, 0.34), rgba(14, 6, 5, 0.44));
+      transition: opacity 15000ms linear;
+    }
+
+    .notif:hover {
+      transform: translateX(2px);
+      border-color: rgba(255, 198, 128, 0.2);
+    }
+
+    .notif-icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 1.2rem;
+      border: 1px solid currentColor;
+      box-shadow: 0 0 18px rgba(255, 255, 255, 0.08);
+    }
+
+    .notif.info { color: #9fd0ff; }
+    .notif.success { color: #9cff8d; }
+    .notif.warning { color: var(--warn); }
+    .notif.error { color: var(--bad); }
+
+    .notif.glass-phase {
+      border-color: rgba(255, 198, 128, 0.18);
+      box-shadow: 0 26px 60px rgba(0, 0, 0, 0.44);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+
+    .notif.glass-phase::before {
+      opacity: 0;
+    }
+
+    .notif.glass-phase::after {
+      opacity: 1;
+    }
+
+    .notif.fading {
+      opacity: 0;
+      filter: blur(8px);
+      transform: translateY(10px);
+      transition:
+        opacity 5000ms linear,
+        filter 5000ms linear,
+        transform 5000ms ease;
+    }
+
+    .prog {
+      margin-top: 10px;
+      height: 18px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.04);
+      border: 2px solid rgba(255, 132, 24, 0.82);
+      position: relative;
+    }
+
+    .prog > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(255, 184, 79, 0.92), rgba(255, 116, 72, 0.88));
+      box-shadow: var(--glow-fire);
+    }
+
+    .prog::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: clamp(16px, var(--meter, 50%), calc(100% - 16px));
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(247, 243, 239, 0.92);
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.06);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.18); opacity: 0.72; }
+    }
+
+    @keyframes taskFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes taskDoneFlash {
+      0% { box-shadow: 0 0 0 rgba(17, 239, 211, 0); }
+      35% { box-shadow: 0 0 30px rgba(17, 239, 211, 0.18); }
+      100% { box-shadow: 0 0 0 rgba(17, 239, 211, 0); }
+    }
+
+    @keyframes progressDrift {
+      0% { background-position: 0 0, -180px 0; }
+      100% { background-position: 0 0, 180px 0; }
+    }
+
+    @keyframes knobPulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.08); }
+    }
+
+    @media (max-width: 1180px) {
+      .topbar,
+      .main-grid,
+      .lower-grid,
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        position: static;
+        grid-auto-flow: column;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        justify-items: stretch;
+      }
+
+      .rail .logo {
+        display: none;
+      }
+
+      .goal-grid,
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="browser-bar">
+      <div class="traffic">
+        <button class="status-light idle" type="button" id="status-core-light" data-tip="Core runtime state will appear here.">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="status-label"><span class="status-name">Core</span><span class="status-value" id="status-core-value">awaiting</span></span>
+        </button>
+        <button class="status-light idle" type="button" id="status-observer-light" data-tip="Observer state will appear here.">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="status-label"><span class="status-name">Observer</span><span class="status-value" id="status-observer-value">awaiting</span></span>
+        </button>
+        <button class="status-light idle" type="button" id="status-attention-light" data-tip="Attention load will appear here.">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="status-label"><span class="status-name">Attention</span><span class="status-value" id="status-attention-value">clear</span></span>
+        </button>
+      </div>
+      <button class="url-pill" type="button" id="observer-route-pill">sweb.local/observer/dashboard</button>
+      <div class="browser-actions">
+        <button class="browser-action" type="button" id="browser-refresh-btn" data-tip="Refresh observer data">↻</button>
+        <button class="browser-action" type="button" id="browser-selfcare-btn" data-tip="Run bounded self-care">⚙</button>
+        <button class="browser-action" type="button" id="browser-report-btn" data-tip="Generate HTML report">↓</button>
+        <button class="browser-action" type="button" id="browser-command-btn" data-tip="Open command palette">⌘</button>
+      </div>
+    </section>
+
+    <section class="dashboard">
+      <aside class="rail">
+        <div class="logo">⟠</div>
+        <button class="rail-btn active" type="button" data-rail-target="hero-section" title="Overview">⌂</button>
+        <button class="rail-btn" type="button" data-rail-target="health-section" title="Health">◎</button>
+        <button class="rail-btn" type="button" data-rail-target="agents-section" title="Agents">⌁</button>
+        <button class="rail-btn" type="button" data-rail-target="services-section" title="Services">⚠</button>
+        <button class="rail-btn" type="button" data-rail-target="artifacts-section" title="Artifacts">☰</button>
+        <button class="rail-btn" type="button" data-rail-target="tasks-section" title="Tasks">⟳</button>
+      </aside>
+
+      <section class="board">
+        <div class="topbar">
+          <article class="hero glass" id="hero-section">
+            <div class="eyebrow">Observer Control Plane</div>
+            <h1>Glass-Forged Runtime Oversight</h1>
+            <p id="hero-summary">
+              Spiderweb’s observer stays above services, tracks drift, logs self-care outcomes, and exposes the
+              system state needed for operators to understand which services and pipeline agents are healthy,
+              degraded, restarting, or offline.
+            </p>
+            <div class="chip-row">
+              <span class="chip">Core runtime: 90%</span>
+              <span class="chip">Self-care: 5%</span>
+              <span class="chip">Logging: 5%</span>
+              <span class="chip">Storage: system.db + agent.db</span>
+            </div>
+          </article>
+
+          <aside class="profile-card glass">
+            <div class="profile-head">
+              <div class="avatar-wrap">
+                <div class="avatar"></div>
+                <div>
+                  <div class="eyebrow" style="margin-bottom:6px;">Mode</div>
+                  <h2 id="profile-mode-title">Default Dashboard</h2>
+                  <div class="muted" id="profile-mode-subtitle">Observer-backed operator surface</div>
+                </div>
+              </div>
+              <span class="status-pill" id="profile-status-pill">● Live</span>
+            </div>
+            <div class="controls">
+              <span class="badge good"><span class="dot"></span> Healthy</span>
+              <span class="badge warn"><span class="dot"></span> Needs attention</span>
+            </div>
+            <div class="menu-shell">
+              <div class="menu" id="dashboard-menu">
+                <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="dashboard-menu-panel">
+                  <span class="burger" aria-hidden="true">
+                    <span class="burger-line"></span>
+                    <span class="burger-line"></span>
+                    <span class="burger-line"></span>
+                  </span>
+                  <span class="menu-toggle-label">Open control menu</span>
+                </button>
+                <div class="menu-panel" id="dashboard-menu-panel">
+                  <div class="menu-list">
+                    <button class="menu-item" type="button" data-menu-action="toggle-debug">
+                      <span>Switch to debug mode</span>
+                      <span class="mini">Reveal richer event payloads and remediation reasoning.</span>
+                    </button>
+                    <button class="menu-item" type="button" data-menu-action="focus-agents">
+                      <span>Focus pipeline agents</span>
+                      <span class="mini">Filter the board by online, degraded, restarting, or offline agents.</span>
+                    </button>
+                    <button class="menu-item" type="button" data-menu-action="export-report">
+                      <span>Export HTML report</span>
+                      <span class="mini">Capture baseline, self-care, and current runtime state.</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <section class="status-grid" id="health-section">
+          <article class="glass metric">
+            <div class="label">Services up</div>
+            <div class="value good" id="metric-services-up">12</div>
+            <div class="meta-line" id="metric-services-meta">Gateway, Trigger, cheap runtime, observer-adjacent services</div>
+            <button class="detail-trigger" type="button" data-detail-title="Services up" data-detail-body="Observer summary: one service remains in watch state, but no hard outage is blocking core runtime work.">Read more...</button>
+          </article>
+          <article class="glass metric">
+            <div class="label">Agents online</div>
+            <div class="value idle" id="metric-agents-online">24</div>
+            <div class="meta-line" id="metric-agents-meta">Across intake, triage, transfer, and watch pipelines</div>
+            <button class="detail-trigger" type="button" data-detail-title="Agents online" data-detail-body="This count comes from summarized agent presence, not transcript scraping. The observer should read status summaries rather than raw pipeline transcripts by default.">Read more...</button>
+          </article>
+          <article class="glass metric">
+            <div class="label">Needs attention</div>
+            <div class="value warn" id="metric-attention">2</div>
+            <div class="meta-line" id="metric-attention-meta">One degraded service, one offline pipeline agent</div>
+            <button class="detail-trigger" type="button" data-detail-title="Needs attention" data-detail-body="Degraded means reachable but drifted or unstable, not necessarily hard-down. Offline remains a separate state and should be surfaced more aggressively.">Read more...</button>
+          </article>
+          <article class="glass metric">
+            <div class="label">Last self-care delta</div>
+            <div class="value good" id="metric-selfcare-delta">+13</div>
+            <div class="meta-line" id="metric-selfcare-meta">Post-care score improved over the pre-care check</div>
+            <button class="detail-trigger" type="button" data-detail-title="Last self-care delta" data-detail-body="Baseline, pre-care, and post-care remain separate benchmark records. The observer should log all three so improvement, failure, and regression stay measurable.">Read more...</button>
+          </article>
+        </section>
+
+        <section class="gauge-grid">
+          <article class="glass gauge-card">
+            <div class="eyebrow">Health Score</div>
+            <div class="gauge-shell">
+              <div class="gauge-arc" id="gauge-health-arc"></div>
+              <div class="gauge-center">
+                <div>
+                  <div class="gauge-value" id="gauge-health-value">0</div>
+                  <div class="gauge-sub">Observer</div>
+                </div>
+              </div>
+            </div>
+            <div class="mini" id="gauge-health-meta">Waiting for observer overview data.</div>
+          </article>
+          <article class="glass gauge-card">
+            <div class="eyebrow">Attention Load</div>
+            <div class="gauge-shell">
+              <div class="gauge-arc" id="gauge-attention-arc"></div>
+              <div class="gauge-center">
+                <div>
+                  <div class="gauge-value" id="gauge-attention-value">0%</div>
+                  <div class="gauge-sub">Attention</div>
+                </div>
+              </div>
+            </div>
+            <div class="mini" id="gauge-attention-meta">Derived from degraded/offline service and agent states.</div>
+          </article>
+          <article class="glass gauge-card">
+            <div class="eyebrow">Self-Care Recovery</div>
+            <div class="gauge-shell">
+              <div class="gauge-arc" id="gauge-selfcare-arc"></div>
+              <div class="gauge-center">
+                <div>
+                  <div class="gauge-value" id="gauge-selfcare-value">0</div>
+                  <div class="gauge-sub">Delta</div>
+                </div>
+              </div>
+            </div>
+            <div class="mini" id="gauge-selfcare-meta">Latest self-care delta from the most recent recorded cycle.</div>
+          </article>
+        </section>
+
+        <section class="observer-banner">
+          <article class="mini-card">
+            <div class="label">Observer API</div>
+            <div class="value good" style="font-size:1.15rem;" id="observer-api-state">Connecting</div>
+            <div class="mini" id="observer-api-meta">Waiting for the first dashboard hydration.</div>
+          </article>
+          <article class="mini-card">
+            <div class="label">Dashboard mode</div>
+            <div class="value idle" style="font-size:1.15rem;" id="observer-mode-state">default</div>
+            <div class="mini" id="observer-mode-meta">Default mode favors concise operator summaries.</div>
+          </article>
+          <article class="mini-card">
+            <div class="label">Last refresh</div>
+            <div class="value good" style="font-size:1.15rem;" id="observer-refresh-state">Pending</div>
+            <div class="mini" id="observer-refresh-meta">No successful refresh has completed yet.</div>
+          </article>
+          <article class="mini-card">
+            <div class="label">Next refresh</div>
+            <div class="value idle" style="font-size:1.15rem;" id="observer-next-refresh-state">Pending</div>
+            <div class="mini" id="observer-next-refresh-meta">Auto-refresh countdown appears here.</div>
+          </article>
+          <article class="mini-card">
+            <div class="label">Last issue</div>
+            <div class="value warn" style="font-size:1.15rem;" id="observer-issue-state">None</div>
+            <div class="mini" id="observer-issue-meta">Recent dashboard or observer endpoint failures appear here.</div>
+          </article>
+        </section>
+
+        <section class="main-grid">
+          <div class="charts">
+            <article class="glass chart-card">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">System Drift</div>
+                  <h2>Health and benchmark motion</h2>
+                </div>
+                <button class="btn active" data-view="overview">Overview</button>
+              </div>
+              <div class="controls" style="margin-bottom:10px;">
+                <button class="btn active" data-view="overview">Overview</button>
+                <button class="btn" data-view="flow">Runtime flow</button>
+                <button class="btn" data-view="benchmark">Benchmark cycle</button>
+                <button class="btn" data-view="storage">Storage split</button>
+              </div>
+
+              <section class="panel" data-panel="overview">
+                <div class="chart-surface">
+                  <div class="spark-tag" id="benchmark-spark-tag">14:05 post-care +13</div>
+                  <div class="line">
+                    <svg viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true">
+                      <path class="a" id="chart-primary-path" d="M40,220 C120,170 180,150 260,144 C340,138 390,178 470,182 C560,186 618,145 705,126 C786,108 864,78 960,60"></path>
+                      <path class="b" id="chart-secondary-path" d="M40,174 C130,172 220,168 300,164 C394,159 474,158 560,154 C642,151 740,145 960,138"></path>
+                    </svg>
+                  </div>
+                </div>
+                <div class="footer-note" id="benchmark-footer-note">
+                  The observer tracks runtime drift against the startup baseline and preserves benchmark state before and after self-care.
+                </div>
+                <div class="recommendation-list" id="overview-recommendations">
+                  <div class="recommendation-item">
+                    <div class="recommendation-mark">1</div>
+                    <div class="mini">Observer recommendations will appear here once live overview data is loaded.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel hidden" data-panel="flow">
+                <div class="panel-state-row" style="margin-top:0; margin-bottom:12px;">
+                  <span class="badge idle" id="flow-panel-state"><span class="dot"></span> awaiting data</span>
+                  <span class="badge" id="flow-panel-meta"><span class="dot"></span> live flow counts will appear here</span>
+                </div>
+                <div class="timeline">
+                  <div class="timeline-item">
+                    <div class="mini">1. Services emit structured signals</div>
+                    <div class="mini">Gateway, Trigger, cheap runtime, and pipeline managers publish small health and event summaries.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">2. Pipeline managers own pipelines</div>
+                    <div class="mini">Detailed pipeline and agent activity is written into <code>agent.db</code>.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">3. Observer aggregates system state</div>
+                    <div class="mini">System-wide health, drift, and remediation history are written into <code>system.db</code>.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">4. Self-care runs bounded actions</div>
+                    <div class="mini">Only allowed cleanup and restart-request behaviors run inside the self-care budget.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">5. Dashboard reads observer state</div>
+                    <div class="mini">The dashboard does not scrape raw service internals by default.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel hidden" data-panel="benchmark">
+                <div class="lower-grid" style="margin-top:0;">
+                  <div class="glass">
+                    <div class="eyebrow">Baseline</div>
+                    <h3 class="good" style="font-size:2rem;" id="benchmark-baseline-score">96</h3>
+                    <p id="benchmark-baseline-summary">Captured near startup and held as the benchmark anchor for future checks.</p>
+                  </div>
+                  <div class="glass">
+                    <div class="eyebrow">Pre-care check</div>
+                    <h3 class="warn" style="font-size:2rem;" id="benchmark-pre-score">71</h3>
+                    <p id="benchmark-pre-summary">Shows how far the runtime drifted before self-care acted.</p>
+                  </div>
+                  <div class="glass">
+                    <div class="eyebrow">Post-care result</div>
+                    <h3 class="good" style="font-size:2rem;" id="benchmark-post-score">84</h3>
+                    <p id="benchmark-post-summary">Used to measure whether the bounded self-care cycle improved runtime health.</p>
+                  </div>
+                  <div class="glass">
+                    <div class="eyebrow">Rule</div>
+                    <p>Never overwrite the pre-care check. Preserve all three views so the observer can detect improvement, failure, or regression.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel hidden" data-panel="storage">
+                <div class="lower-grid" style="margin-top:0;">
+                  <article class="glass">
+                    <div class="eyebrow">system.db</div>
+                    <h3>Control-plane truth</h3>
+                    <div class="mini" id="storage-system-meta">system.db summaries will appear here.</div>
+                    <ul>
+                      <li>service registry and current up/down state</li>
+                      <li>observer events and benchmark snapshots</li>
+                      <li>self-care cycles and remediation history</li>
+                      <li>dashboard and report query surface</li>
+                    </ul>
+                  </article>
+                  <article class="glass">
+                    <div class="eyebrow">agent.db</div>
+                    <h3>Pipeline detail</h3>
+                    <div class="mini" id="storage-agent-meta">agent.db summaries will appear here.</div>
+                    <ul>
+                      <li>pipeline manager state and queue depth</li>
+                      <li>agent events and task-level history</li>
+                      <li>session traces and detailed error records</li>
+                      <li>not the observer’s default data source</li>
+                    </ul>
+                  </article>
+                </div>
+              </section>
+            </article>
+
+            <div class="lower-grid">
+              <article class="glass">
+                <div class="eyebrow">Runtime Guardrails</div>
+                <h3>Budget and hard caps</h3>
+                <div class="mini">The budget split is policy, not permission for infinite memory or logs.</div>
+                <div class="prog"><span style="width:90%;"></span></div>
+                <div class="line-head mini" style="margin-top:8px;"><span>Core runtime</span><span>90%</span></div>
+                <div class="prog"><span style="width:5%;"></span></div>
+                <div class="line-head mini" style="margin-top:8px;"><span>Self-care</span><span>5%</span></div>
+                <div class="prog"><span style="width:5%;"></span></div>
+                <div class="line-head mini" style="margin-top:8px;"><span>Logging</span><span>5%</span></div>
+                <button class="detail-trigger" type="button" data-detail-title="Runtime guardrails" data-detail-body="Hard caps still matter: database size, retention windows, concurrency limits, and bounded action counts. The 90/5/5 split is policy, not permission for unbounded resource use.">Read more...</button>
+              </article>
+
+              <article class="glass">
+                <div class="eyebrow">Last 24 Hours</div>
+                <h3>Errors and critical events</h3>
+                <div class="panel-state-row">
+                  <span class="badge idle" id="stats-panel-state"><span class="dot"></span> awaiting data</span>
+                  <span class="badge" id="stats-panel-meta"><span class="dot"></span> 24h event summaries are not loaded yet</span>
+                </div>
+                <div class="goal-grid">
+                  <div class="mini-card">
+                    <div class="label">Errors</div>
+                    <div class="value bad" style="font-size:1.5rem;" id="stats-errors">17</div>
+                    <div class="mini" id="stats-errors-meta">Across services, managers, and observer-tracked agent summaries</div>
+                  </div>
+                  <div class="mini-card">
+                    <div class="label">Critical events</div>
+                    <div class="value warn" style="font-size:1.5rem;" id="stats-critical">4</div>
+                    <div class="mini" id="stats-critical-meta">Offline agents, failed restarts, and hard-degraded service moments</div>
+                  </div>
+                </div>
+                <div class="timeline" id="stats-events-timeline">
+                  <div class="timeline-item">
+                    <div class="mini">06:20</div>
+                    <div class="mini">cheap-runtime crossed the observer error threshold after repeated latency spikes.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">11:42</div>
+                    <div class="mini">watch-agent-03 dropped offline and triggered a restart-request critical event.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">13:14</div>
+                    <div class="mini">Trigger worker recovered after self-care cleanup and re-registration.</div>
+                  </div>
+                </div>
+                <button class="detail-trigger" type="button" data-detail-title="Last 24 hours" data-detail-body="The observer dashboard should expose rolling 24-hour stats for errors and critical events. This gives operators short-horizon operational context instead of only current status snapshots.">Read more...</button>
+              </article>
+
+              <article class="glass">
+                <div class="eyebrow">Last cycle</div>
+                <h3>Self-care timeline</h3>
+                <div class="panel-state-row">
+                  <span class="badge idle" id="selfcare-panel-state"><span class="dot"></span> awaiting data</span>
+                  <span class="badge" id="selfcare-panel-meta"><span class="dot"></span> self-care cycle history is not loaded yet</span>
+                </div>
+                <div class="timeline" id="selfcare-timeline">
+                  <div class="timeline-item">
+                    <div class="mini">14:00</div>
+                    <div class="mini">Observer detected latency drift above baseline for cheap-runtime.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">14:03</div>
+                    <div class="mini">Self-care requested restart for watch-agent-03 after dead process detection.</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="mini">14:05</div>
+                    <div class="mini">Post-care benchmark rose from 71 to 84 without exceeding maintenance budget.</div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="charts">
+            <article class="glass" id="agents-section">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Pipeline Presence</div>
+                  <h2>Active agents and status</h2>
+                </div>
+                <span class="badge good"><span class="dot"></span> Observer-backed</span>
+              </div>
+              <div class="agent-filters" id="agent-filters">
+                <button class="agent-filter active" type="button" data-agent-filter="all">All</button>
+                <button class="agent-filter" type="button" data-agent-filter="online">Online</button>
+                <button class="agent-filter" type="button" data-agent-filter="attention">Attention</button>
+                <button class="agent-filter" type="button" data-agent-filter="busy">Busy</button>
+              </div>
+              <select class="panel-search" id="agent-pipeline-select" aria-label="Filter agents by pipeline">
+                <option value="all">All pipelines</option>
+              </select>
+              <input class="panel-search" id="agent-search-input" type="search" placeholder="Search agent, pipeline, or manager">
+              <div class="panel-state-row">
+                <span class="badge idle" id="agents-panel-state"><span class="dot"></span> awaiting data</span>
+                <span class="badge" id="agents-panel-meta"><span class="dot"></span> agent summaries are not loaded yet</span>
+              </div>
+              <div class="goal-grid" id="agent-summary-grid" style="margin-top:14px;">
+                <div class="mini-card">
+                  <div class="label">Agent summary</div>
+                  <div class="value idle" style="font-size:1.15rem;">Pending</div>
+                  <div class="mini">Waiting for the observer agent summary endpoint.</div>
+                </div>
+              </div>
+              <div class="agent-grid" id="agent-grid">
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">intake-agent-01</div>
+                    <span class="badge good"><span class="dot"></span> Online</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Intake</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-intake</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Busy classifying queue batch</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>3s ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="intake-agent-01" data-detail-body="Recent task: normalized 44 inbound events and routed 6 for escalation. The observer should display this as a summary, not a transcript.">Read more...</button>
+                </article>
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">triage-agent-02</div>
+                    <span class="badge warn"><span class="dot"></span> Degraded</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Triage</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-triage</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Latency drift above baseline</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>11s ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="triage-agent-02" data-detail-body="Observer note: still online, but may trigger self-care if drift persists. Degraded does not mean offline, and the dashboard should keep those states separate.">Read more...</button>
+                </article>
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">transfer-agent-04</div>
+                    <span class="badge idle"><span class="dot"></span> Idle</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Transfer</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-transfer</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Standing by for kickoff packet</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>5s ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="transfer-agent-04" data-detail-body="Recent task: packaged the last handoff sheet and returned to idle. Idle should be visible as a first-class state, not hidden inside generic online status.">Read more...</button>
+                </article>
+                <article class="glass agent-card">
+                  <div class="agent-head">
+                    <div class="agent-name">watch-agent-03</div>
+                    <span class="badge bad"><span class="dot"></span> Offline</span>
+                  </div>
+                  <div class="rowline mini"><span>Pipeline</span><span>Watch</span></div>
+                  <div class="rowline mini"><span>Manager</span><span>pipeline-manager-watch</span></div>
+                  <div class="rowline mini"><span>Status</span><span>Restart requested by self-care</span></div>
+                  <div class="rowline mini"><span>Last seen</span><span>8m ago</span></div>
+                  <button class="detail-trigger" type="button" data-detail-title="watch-agent-03" data-detail-body="Offline state is surfaced in the dashboard without exposing transcript-level content. Restart-request and offline status should be visible in one view.">Read more...</button>
+                </article>
+              </div>
+            </article>
+
+              <article class="glass" id="services-section">
+                <div class="section-head">
+                  <div>
+                    <div class="eyebrow">Managed Services</div>
+                  <h2>Service visibility and actions</h2>
+                </div>
+              </div>
+              <div class="goal-grid">
+                <div class="mini-card">
+                  <div class="label">Services tracked</div>
+                  <div class="value good" style="font-size:1.1rem;" id="service-count">0</div>
+                  <div class="mini" id="service-count-meta">Observer service state will appear here.</div>
+                </div>
+                <div class="mini-card">
+                  <div class="label">Restartable now</div>
+                  <div class="value warn" style="font-size:1.1rem;" id="restartable-count">0</div>
+                  <div class="mini" id="restartable-count-meta">Managed services eligible for restart requests.</div>
+                </div>
+              </div>
+              <div class="service-filters" id="service-filters">
+                <button class="service-filter active" type="button" data-service-filter="all">All</button>
+                <button class="service-filter" type="button" data-service-filter="online">Online</button>
+                <button class="service-filter" type="button" data-service-filter="watch">Watch</button>
+                <button class="service-filter" type="button" data-service-filter="degraded">Degraded</button>
+                <button class="service-filter" type="button" data-service-filter="restarting">Restarting</button>
+                <button class="service-filter" type="button" data-service-filter="offline">Offline</button>
+                <button class="service-filter" type="button" data-service-filter="owned">Owned</button>
+              </div>
+              <input class="panel-search" id="service-search-input" type="search" placeholder="Search service, action, or message">
+              <div class="panel-state-row">
+                <span class="badge idle" id="services-panel-state"><span class="dot"></span> awaiting data</span>
+                <span class="badge" id="services-panel-meta"><span class="dot"></span> service summaries are not loaded yet</span>
+              </div>
+              <div class="service-grid" id="service-grid">
+                <article class="service-card">
+                  <div class="service-name">Service data loading</div>
+                  <div class="rowline mini"><span>State</span><span>waiting</span></div>
+                  <div class="rowline mini"><span>Message</span><span>Observer services will populate this panel.</span></div>
+                </article>
+              </div>
+              <div class="controls" style="margin-top:14px;">
+                <button class="btn" type="button" id="refresh-artifacts-btn">Refresh artifacts</button>
+                <button class="btn" type="button" id="generate-journal-btn">Generate journal</button>
+                <button class="btn" type="button" id="run-selfcare-btn">Run self-care</button>
+                <button class="btn" type="button" id="reset-baseline-btn">Reset baseline</button>
+                <button class="btn" type="button" id="clear-events-btn">Clear old events</button>
+              </div>
+              </article>
+
+              <article class="glass" id="artifacts-section">
+                <div class="section-head">
+                  <div>
+                    <div class="eyebrow">Reports</div>
+                  <h2>Reports and journal</h2>
+                </div>
+              </div>
+              <div class="goal-grid">
+                <div class="mini-card">
+                  <div class="label">Latest report</div>
+                  <div class="value good" style="font-size:1.1rem;" id="latest-report-name">none yet</div>
+                  <div class="mini" id="latest-report-meta">Generate a report from the control menu to populate this.</div>
+                </div>
+                <div class="mini-card">
+                  <div class="label">Latest journal</div>
+                  <div class="value warn" style="font-size:1.1rem;" id="latest-journal-date">none yet</div>
+                  <div class="mini" id="latest-journal-meta">Daily observer journal availability appears here.</div>
+                </div>
+              </div>
+              <div class="ring-row">
+                <div class="ring" id="report-health-ring"></div>
+                <div class="mini" id="latest-journal-snippet">
+                  Latest report and journal metadata should be pulled from the observer so operators can jump from system state into readable outputs.
+                </div>
+              </div>
+              <div class="panel-state-row">
+                <span class="badge idle" id="artifacts-panel-state"><span class="dot"></span> awaiting data</span>
+                <span class="badge" id="artifacts-panel-meta"><span class="dot"></span> report and journal metadata are not loaded yet</span>
+              </div>
+              <div class="controls" style="margin-top:14px;">
+                <button class="btn" type="button" id="open-latest-report-btn">Open latest report</button>
+                <button class="btn" type="button" id="read-latest-journal-btn">Read latest journal</button>
+              </div>
+              </article>
+
+              <article class="glass" id="tasks-section">
+                <div class="section-head">
+                  <div>
+                    <div class="eyebrow">Operator Tasks</div>
+                    <h2>Live task lane and completion flow</h2>
+                  </div>
+                  <span class="badge idle"><span class="dot"></span> Bounded queue</span>
+                </div>
+                <div class="task-shell">
+                  <div class="task-toolbar">
+                    <div class="mini" id="task-toolbar-note">Running work stays visually muted until it either finishes cleanly or escalates.</div>
+                    <div class="controls">
+                      <button class="btn" type="button" id="task-refresh-btn">Refresh tasks</button>
+                      <button class="btn" type="button" id="task-complete-demo-btn">Complete demo task</button>
+                    </div>
+                  </div>
+                  <div class="task-summary" id="task-summary">
+                    <div class="task-stat"><strong>0</strong> total</div>
+                    <div class="task-stat"><strong>0</strong> running</div>
+                    <div class="task-stat"><strong>0</strong> attention</div>
+                    <div class="task-stat"><strong>0</strong> done</div>
+                  </div>
+                  <div class="panel-state-row">
+                    <span class="badge idle" id="tasks-panel-state"><span class="dot"></span> awaiting data</span>
+                    <span class="badge" id="tasks-panel-meta"><span class="dot"></span> task lane has not been hydrated yet</span>
+                  </div>
+                  <div class="task-filters" id="task-filters">
+                    <button class="task-filter active" type="button" data-task-filter="all">All</button>
+                    <button class="task-filter" type="button" data-task-filter="running">Running</button>
+                    <button class="task-filter" type="button" data-task-filter="attention">Attention</button>
+                    <button class="task-filter" type="button" data-task-filter="done">Done</button>
+                  </div>
+                  <div class="task-list" id="task-list">
+                    <article class="task-row">
+                      <div class="task-icon">
+                        <div class="task-check"><span class="task-check-mark">✓</span></div>
+                      </div>
+                      <div class="task-body">
+                        <div class="task-name">Observer bootstrap loading</div>
+                        <div class="task-meta">Waiting for live task hydration from observer endpoints.</div>
+                        <div class="capsule-progress muted" style="--fill: 10%;"></div>
+                      </div>
+                      <div class="task-side">
+                        <div class="task-state-tag">Queued</div>
+                        <div class="mini">10%</div>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </article>
+
+              <article class="glass">
+                <div class="section-head">
+                <div>
+                  <div class="eyebrow">Notification Behavior</div>
+                  <h2>Toast-based observer alerts</h2>
+                </div>
+              </div>
+              <div class="mini">
+                Observer warnings should appear as timed bottom-right toasts. The oldest toast stays at the top of the stack, newer ones enter below it, and each item fades away after its own timeout.
+              </div>
+              <div class="controls" style="margin-top:14px;">
+                <button class="btn" type="button" id="toast-info-btn">Spawn info</button>
+                <button class="btn" type="button" id="toast-success-btn">Spawn success</button>
+                <button class="btn" type="button" id="toast-warning-btn">Spawn warning</button>
+                <button class="btn" type="button" id="toast-error-btn">Spawn error</button>
+              </div>
+              <div class="toast-stage mini">
+                Live demo uses the bottom-right stack rather than this panel.
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <aside class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></aside>
+
+  <aside class="detail-drawer" id="detail-drawer" aria-live="polite">
+    <div class="detail-head">
+      <div>
+        <div class="eyebrow">Context</div>
+        <h3 id="detail-title">Detail</h3>
+      </div>
+      <button class="detail-close" type="button" id="detail-close">Close</button>
+    </div>
+    <div class="mini" id="detail-body">Select a card detail to read more.</div>
+  </aside>
+
+  <aside class="command-palette" id="command-palette" aria-hidden="true">
+    <div class="command-shell">
+      <div class="eyebrow">Operator Shortcuts</div>
+      <input class="command-input" id="command-input" type="search" placeholder="Type to filter actions or press Esc to close">
+      <div class="command-list" id="command-list"></div>
+    </div>
+  </aside>
+
+  <script>
+    const buttons = document.querySelectorAll("[data-view]");
+    const panels = document.querySelectorAll("[data-panel]");
+    const railButtons = document.querySelectorAll("[data-rail-target]");
+    const menu = document.getElementById("dashboard-menu");
+    const menuToggle = menu ? menu.querySelector(".menu-toggle") : null;
+    const browserRefreshBtn = document.getElementById("browser-refresh-btn");
+    const browserSelfCareBtn = document.getElementById("browser-selfcare-btn");
+    const browserReportBtn = document.getElementById("browser-report-btn");
+    const browserCommandBtn = document.getElementById("browser-command-btn");
+    const observerRoutePill = document.getElementById("observer-route-pill");
+    const toastStack = document.getElementById("toast-stack");
+    const toastButtons = {
+      info: document.getElementById("toast-info-btn"),
+      success: document.getElementById("toast-success-btn"),
+      warning: document.getElementById("toast-warning-btn"),
+      error: document.getElementById("toast-error-btn")
+    };
+    const detailDrawer = document.getElementById("detail-drawer");
+    const detailTitle = document.getElementById("detail-title");
+    const detailBody = document.getElementById("detail-body");
+    const detailClose = document.getElementById("detail-close");
+    const commandPalette = document.getElementById("command-palette");
+    const commandInput = document.getElementById("command-input");
+    const commandList = document.getElementById("command-list");
+    let detailTriggers = [];
+    const taskList = document.getElementById("task-list");
+    const taskRefreshBtn = document.getElementById("task-refresh-btn");
+    const taskCompleteDemoBtn = document.getElementById("task-complete-demo-btn");
+    const refreshArtifactsBtn = document.getElementById("refresh-artifacts-btn");
+    const generateJournalBtn = document.getElementById("generate-journal-btn");
+    const runSelfCareBtn = document.getElementById("run-selfcare-btn");
+    const resetBaselineBtn = document.getElementById("reset-baseline-btn");
+    const clearEventsBtn = document.getElementById("clear-events-btn");
+    const openLatestReportBtn = document.getElementById("open-latest-report-btn");
+    const readLatestJournalBtn = document.getElementById("read-latest-journal-btn");
+    const taskToolbarNote = document.getElementById("task-toolbar-note");
+    const taskSummary = document.getElementById("task-summary");
+    const tasksPanelState = document.getElementById("tasks-panel-state");
+    const tasksPanelMeta = document.getElementById("tasks-panel-meta");
+    const taskFilters = document.querySelectorAll("[data-task-filter]");
+    const agentFilters = document.querySelectorAll("[data-agent-filter]");
+    const agentPipelineSelect = document.getElementById("agent-pipeline-select");
+    const agentSearchInput = document.getElementById("agent-search-input");
+    const serviceFilters = document.querySelectorAll("[data-service-filter]");
+    const serviceSearchInput = document.getElementById("service-search-input");
+    const menuActions = document.querySelectorAll("[data-menu-action]");
+    const statusCoreLight = document.getElementById("status-core-light");
+    const statusCoreValue = document.getElementById("status-core-value");
+    const statusObserverLight = document.getElementById("status-observer-light");
+    const statusObserverValue = document.getElementById("status-observer-value");
+    const statusAttentionLight = document.getElementById("status-attention-light");
+    const statusAttentionValue = document.getElementById("status-attention-value");
+    const heroSummary = document.getElementById("hero-summary");
+    const profileModeTitle = document.getElementById("profile-mode-title");
+    const profileModeSubtitle = document.getElementById("profile-mode-subtitle");
+    const profileStatusPill = document.getElementById("profile-status-pill");
+    const metricServicesUp = document.getElementById("metric-services-up");
+    const metricServicesMeta = document.getElementById("metric-services-meta");
+    const metricAgentsOnline = document.getElementById("metric-agents-online");
+    const metricAgentsMeta = document.getElementById("metric-agents-meta");
+    const metricAttention = document.getElementById("metric-attention");
+    const metricAttentionMeta = document.getElementById("metric-attention-meta");
+    const metricSelfcareDelta = document.getElementById("metric-selfcare-delta");
+    const metricSelfcareMeta = document.getElementById("metric-selfcare-meta");
+    const overviewRecommendations = document.getElementById("overview-recommendations");
+    const gaugeHealthArc = document.getElementById("gauge-health-arc");
+    const gaugeHealthValue = document.getElementById("gauge-health-value");
+    const gaugeHealthMeta = document.getElementById("gauge-health-meta");
+    const gaugeAttentionArc = document.getElementById("gauge-attention-arc");
+    const gaugeAttentionValue = document.getElementById("gauge-attention-value");
+    const gaugeAttentionMeta = document.getElementById("gauge-attention-meta");
+    const gaugeSelfCareArc = document.getElementById("gauge-selfcare-arc");
+    const gaugeSelfCareValue = document.getElementById("gauge-selfcare-value");
+    const gaugeSelfCareMeta = document.getElementById("gauge-selfcare-meta");
+    const benchmarkBaselineScore = document.getElementById("benchmark-baseline-score");
+    const benchmarkBaselineSummary = document.getElementById("benchmark-baseline-summary");
+    const benchmarkPreScore = document.getElementById("benchmark-pre-score");
+    const benchmarkPreSummary = document.getElementById("benchmark-pre-summary");
+    const benchmarkPostScore = document.getElementById("benchmark-post-score");
+    const benchmarkPostSummary = document.getElementById("benchmark-post-summary");
+    const benchmarkSparkTag = document.getElementById("benchmark-spark-tag");
+    const benchmarkFooterNote = document.getElementById("benchmark-footer-note");
+    const chartPrimaryPath = document.getElementById("chart-primary-path");
+    const chartSecondaryPath = document.getElementById("chart-secondary-path");
+    const statsErrors = document.getElementById("stats-errors");
+    const statsErrorsMeta = document.getElementById("stats-errors-meta");
+    const statsCritical = document.getElementById("stats-critical");
+    const statsCriticalMeta = document.getElementById("stats-critical-meta");
+    const statsPanelState = document.getElementById("stats-panel-state");
+    const statsPanelMeta = document.getElementById("stats-panel-meta");
+    const statsEventsTimeline = document.getElementById("stats-events-timeline");
+    const selfcarePanelState = document.getElementById("selfcare-panel-state");
+    const selfcarePanelMeta = document.getElementById("selfcare-panel-meta");
+    const selfcareTimeline = document.getElementById("selfcare-timeline");
+    const flowPanelState = document.getElementById("flow-panel-state");
+    const flowPanelMeta = document.getElementById("flow-panel-meta");
+    const storageSystemMeta = document.getElementById("storage-system-meta");
+    const storageAgentMeta = document.getElementById("storage-agent-meta");
+    const agentSummaryGrid = document.getElementById("agent-summary-grid");
+    const agentsPanelState = document.getElementById("agents-panel-state");
+    const agentsPanelMeta = document.getElementById("agents-panel-meta");
+    const agentGrid = document.getElementById("agent-grid");
+    const serviceCount = document.getElementById("service-count");
+    const serviceCountMeta = document.getElementById("service-count-meta");
+    const restartableCount = document.getElementById("restartable-count");
+    const restartableCountMeta = document.getElementById("restartable-count-meta");
+    const servicesPanelState = document.getElementById("services-panel-state");
+    const servicesPanelMeta = document.getElementById("services-panel-meta");
+    const serviceGrid = document.getElementById("service-grid");
+    const latestReportName = document.getElementById("latest-report-name");
+    const latestReportMeta = document.getElementById("latest-report-meta");
+    const latestJournalDate = document.getElementById("latest-journal-date");
+    const latestJournalMeta = document.getElementById("latest-journal-meta");
+    const latestJournalSnippet = document.getElementById("latest-journal-snippet");
+    const artifactsPanelState = document.getElementById("artifacts-panel-state");
+    const artifactsPanelMeta = document.getElementById("artifacts-panel-meta");
+    const reportHealthRing = document.getElementById("report-health-ring");
+    const observerAPIState = document.getElementById("observer-api-state");
+    const observerAPIMeta = document.getElementById("observer-api-meta");
+    const observerModeState = document.getElementById("observer-mode-state");
+    const observerModeMeta = document.getElementById("observer-mode-meta");
+    const observerRefreshState = document.getElementById("observer-refresh-state");
+    const observerRefreshMeta = document.getElementById("observer-refresh-meta");
+    const observerNextRefreshState = document.getElementById("observer-next-refresh-state");
+    const observerNextRefreshMeta = document.getElementById("observer-next-refresh-meta");
+    const observerIssueState = document.getElementById("observer-issue-state");
+    const observerIssueMeta = document.getElementById("observer-issue-meta");
+    let currentTasks = [];
+    let currentTaskFilter = "all";
+    let currentAgentFilter = "all";
+    let currentAgentPipeline = "all";
+    let currentAgentSearch = "";
+    let currentServiceFilter = "all";
+    let currentServiceSearch = "";
+    let dashboardMode = "default";
+    let latestDashboardPayload = null;
+    let latestAgentSummary = null;
+    let latestArtifacts = { report: null, journal: null };
+    let autoRefreshTimer = null;
+    let refreshCountdownTimer = null;
+    let nextRefreshAt = 0;
+    let dashboardStateSaveTimer = null;
+    const dashboardStateKey = "spiderweb.observer.dashboard.state.v1";
+    let commandItems = [];
+
+    function escapeHTML(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function compactLabel(kind, rawValue, index) {
+      const value = String(rawValue || "").trim();
+      if (!value) {
+        return `${kind} ${String(index + 1).padStart(2, "0")}`;
+      }
+      if (value.length <= 22) {
+        return value;
+      }
+      return `${kind} ${String(index + 1).padStart(2, "0")}`;
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "unknown";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleString();
+    }
+
+    function formatRelative(value) {
+      if (!value) return "unknown";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      const diffMs = Date.now() - date.getTime();
+      const seconds = Math.max(0, Math.round(diffMs / 1000));
+      if (seconds < 60) return `${seconds}s ago`;
+      const minutes = Math.round(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.round(hours / 24);
+      return `${days}d ago`;
+    }
+
+    function saveDashboardState() {
+      try {
+        const activeView = Array.from(buttons).find((button) => button.classList.contains("active"))?.dataset.view || "overview";
+        const activeRailTarget = Array.from(railButtons).find((button) => button.classList.contains("active"))?.dataset.railTarget || "hero-section";
+        const payload = {
+          mode: dashboardMode,
+          taskFilter: currentTaskFilter,
+          agentFilter: currentAgentFilter,
+          agentPipeline: currentAgentPipeline,
+          agentSearch: currentAgentSearch,
+          serviceFilter: currentServiceFilter,
+          serviceSearch: currentServiceSearch,
+          activeView,
+          activeRailTarget,
+          scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0))
+        };
+        window.localStorage.setItem(dashboardStateKey, JSON.stringify(payload));
+      } catch (_) {}
+    }
+
+    function scheduleDashboardStateSave() {
+      if (dashboardStateSaveTimer) {
+        window.clearTimeout(dashboardStateSaveTimer);
+      }
+      dashboardStateSaveTimer = window.setTimeout(() => {
+        saveDashboardState();
+      }, 120);
+    }
+
+    function updateRefreshCountdown() {
+      if (!observerNextRefreshState || !observerNextRefreshMeta) return;
+      if (!nextRefreshAt) {
+        observerNextRefreshState.textContent = "Pending";
+        observerNextRefreshMeta.textContent = "Auto-refresh countdown appears here.";
+        return;
+      }
+      const remainingMs = Math.max(0, nextRefreshAt - Date.now());
+      const remainingSec = Math.ceil(remainingMs / 1000);
+      observerNextRefreshState.textContent = `${remainingSec}s`;
+      observerNextRefreshMeta.textContent = `Next automatic refresh in ${remainingSec}s while running in ${dashboardMode} mode.`;
+    }
+
+    function loadDashboardState() {
+      try {
+        const raw = window.localStorage.getItem(dashboardStateKey);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        dashboardMode = saved?.mode === "debug" ? "debug" : "default";
+        currentTaskFilter = typeof saved?.taskFilter === "string" ? saved.taskFilter : "all";
+        currentAgentFilter = typeof saved?.agentFilter === "string" ? saved.agentFilter : "all";
+        currentAgentPipeline = typeof saved?.agentPipeline === "string" ? saved.agentPipeline : "all";
+        currentAgentSearch = typeof saved?.agentSearch === "string" ? saved.agentSearch : "";
+        currentServiceFilter = typeof saved?.serviceFilter === "string" ? saved.serviceFilter : "all";
+        currentServiceSearch = typeof saved?.serviceSearch === "string" ? saved.serviceSearch : "";
+        const activeView = typeof saved?.activeView === "string" ? saved.activeView : "overview";
+        const activeRailTarget = typeof saved?.activeRailTarget === "string" ? saved.activeRailTarget : "hero-section";
+        const savedScrollY = Number.isFinite(saved?.scrollY) ? Number(saved.scrollY) : 0;
+
+        taskFilters.forEach((item) => item.classList.toggle("active", item.dataset.taskFilter === currentTaskFilter));
+        agentFilters.forEach((item) => item.classList.toggle("active", item.dataset.agentFilter === currentAgentFilter));
+        serviceFilters.forEach((item) => item.classList.toggle("active", item.dataset.serviceFilter === currentServiceFilter));
+        railButtons.forEach((item) => item.classList.toggle("active", item.dataset.railTarget === activeRailTarget));
+        if (agentPipelineSelect) agentPipelineSelect.value = currentAgentPipeline;
+        if (agentSearchInput) agentSearchInput.value = currentAgentSearch;
+        if (serviceSearchInput) serviceSearchInput.value = currentServiceSearch;
+        buttons.forEach((item) => item.classList.toggle("active", item.dataset.view === activeView));
+        panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== activeView));
+        if (savedScrollY > 0) {
+          window.requestAnimationFrame(() => {
+            window.scrollTo({ top: savedScrollY, behavior: "auto" });
+            syncRailHighlight();
+          });
+        }
+      } catch (_) {}
+    }
+
+    function stateBadgeClass(state) {
+      const normalized = String(state || "").toLowerCase();
+      if (normalized === "online" || normalized === "healthy" || normalized === "up") return "good";
+      if (normalized === "idle") return "idle";
+      if (normalized === "offline" || normalized === "down" || normalized === "error") return "bad";
+      return "warn";
+    }
+
+    function setStatusLight(node, valueNode, state, value, tip) {
+      if (!node) return;
+      const badgeClass = stateBadgeClass(state);
+      node.className = `status-light ${badgeClass}`;
+      if (valueNode) valueNode.textContent = value;
+      if (tip) node.setAttribute("data-tip", tip);
+      const label = node.querySelector(".status-name")?.textContent || "status";
+      node.setAttribute("aria-label", `${label}: ${value}. ${tip || ""}`.trim());
+    }
+
+    function openStatusLightDetail(kind) {
+      const data = latestDashboardPayload || {};
+      const overview = data?.overview || {};
+      const services = Array.isArray(data?.services) ? data.services : [];
+      const agents = Array.isArray(data?.agents) ? data.agents : [];
+      const servicesUp = services.filter((service) => ["up", "online", "healthy"].includes(String(service.state || "").toLowerCase())).length;
+      const attentionCount = services.filter((service) => ["degraded", "offline", "down", "watch", "restarting", "error"].includes(String(service.state || "").toLowerCase())).length +
+        agents.filter((agent) => ["degraded", "offline", "error"].includes(String(agent.state || "").toLowerCase())).length;
+
+      if (kind === "core") {
+        openDetail(
+          "Core runtime status",
+          `Tracked services: ${services.length}\nServices up: ${servicesUp}\nCurrent state: ${services.length ? `${servicesUp}/${services.length} up` : "awaiting observer data"}\nSummary: ${services.length ? "Core status is derived from tracked service uptime in the observer." : "The observer has not hydrated tracked service state yet."}`
+        );
+        return;
+      }
+
+      if (kind === "observer") {
+        openDetail(
+          "Observer status",
+          `Health score: ${overview?.score ?? "n/a"}\nStatus: ${overview?.status || "awaiting observer data"}\nSummary: ${overview?.summary || "The observer overview payload has not been loaded yet."}`
+        );
+        return;
+      }
+
+      openDetail(
+        "Attention load",
+        `Open attention states: ${attentionCount}\nTracked services: ${services.length}\nTracked agents: ${agents.length}\nSummary: ${attentionCount ? `${attentionCount} tracked service or agent states currently need review.` : "No tracked service or agent states currently need attention."}`
+      );
+    }
+
+    function stateMeterPercent(state) {
+      const normalized = String(state || "").toLowerCase();
+      if (["online", "healthy", "up"].includes(normalized)) return 94;
+      if (normalized === "idle") return 68;
+      if (normalized === "busy" || normalized === "running" || normalized === "restarting") return 52;
+      if (normalized === "degraded" || normalized === "watch") return 34;
+      if (["offline", "down", "error"].includes(normalized)) return 14;
+      return 28;
+    }
+
+    function setGaugeArc(node, percent, colorA, colorB) {
+      if (!node) return;
+      const clamped = Math.max(0, Math.min(100, Number(percent || 0)));
+      const angle = Math.round((240 * clamped) / 100);
+      node.style.setProperty("--gauge-angle", `${angle}deg`);
+      if (colorA) node.style.setProperty("--gauge-color-a", colorA);
+      if (colorB) node.style.setProperty("--gauge-color-b", colorB);
+    }
+
+    function setPanelBadge(node, state, label) {
+      if (!node) return;
+      node.className = `badge ${state}`;
+      node.innerHTML = `<span class="dot"></span> ${escapeHTML(label)}`;
+    }
+
+    function syncRailHighlight() {
+      if (!railButtons.length) return;
+      let activeId = "hero-section";
+      let activeTop = Number.NEGATIVE_INFINITY;
+      railButtons.forEach((button) => {
+        const id = button.dataset.railTarget;
+        if (!id) return;
+        const section = document.getElementById(id);
+        if (!section) return;
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 180 && rect.top > activeTop) {
+          activeTop = rect.top;
+          activeId = id;
+        }
+      });
+      railButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.railTarget === activeId);
+      });
+      scheduleDashboardStateSave();
+    }
+
+    function buildCommandItems() {
+      return [
+        {
+          id: "refresh",
+          label: "Refresh dashboard",
+          description: "Reload the live observer payload immediately.",
+          run: () => performDashboardRefresh()
+        },
+        {
+          id: "toggle-debug",
+          label: dashboardMode === "debug" ? "Switch to default mode" : "Switch to debug mode",
+          description: "Toggle the richer debug dashboard view.",
+          run: () => toggleDashboardMode()
+        },
+        {
+          id: "run-self-care",
+          label: "Run self-care",
+          description: "Trigger a bounded self-care cycle.",
+          run: () => requestSelfCareRun("operator palette")
+        },
+        {
+          id: "generate-report",
+          label: "Generate report",
+          description: "Create a fresh HTML observer report.",
+          run: () => generateObserverReport()
+        },
+        {
+          id: "focus-agent-search",
+          label: "Focus agent search",
+          description: "Jump straight to the agent search field.",
+          run: () => {
+            if (agentSearchInput) {
+              agentSearchInput.focus();
+              agentSearchInput.select();
+            }
+          }
+        },
+        {
+          id: "focus-service-search",
+          label: "Focus service search",
+          description: "Jump straight to the service search field.",
+          run: () => {
+            if (serviceSearchInput) {
+              serviceSearchInput.focus();
+              serviceSearchInput.select();
+            }
+          }
+        }
+      ];
+    }
+
+    function renderCommandPalette(filterText = "") {
+      if (!commandList) return;
+      commandItems = buildCommandItems();
+      const query = String(filterText || "").trim().toLowerCase();
+      const visibleItems = commandItems.filter((item) => {
+        if (!query) return true;
+        return `${item.label} ${item.description}`.toLowerCase().includes(query);
+      });
+      commandList.innerHTML = visibleItems.length ? visibleItems.map((item, index) => `
+        <button class="command-item ${index === 0 ? "active" : ""}" type="button" data-command-id="${escapeHTML(item.id)}">
+          <strong>${escapeHTML(item.label)}</strong>
+          <div class="mini">${escapeHTML(item.description)}</div>
+        </button>
+      `).join("") : `
+        <div class="command-item active">
+          <strong>No matching actions</strong>
+          <div class="mini">Try a shorter search term.</div>
+        </div>
+      `;
+      commandList.querySelectorAll("[data-command-id]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const item = commandItems.find((entry) => entry.id === button.dataset.commandId);
+          if (!item) return;
+          closeCommandPalette();
+          try {
+            await item.run();
+          } catch (error) {
+            makeToast("error", "Command failed", error.message || "Operator command failed.");
+          }
+        });
+      });
+    }
+
+    function openCommandPalette() {
+      if (!commandPalette || !commandInput) return;
+      renderCommandPalette(commandInput.value);
+      commandPalette.classList.add("open");
+      commandPalette.setAttribute("aria-hidden", "false");
+      window.setTimeout(() => {
+        commandInput.focus();
+        commandInput.select();
+      }, 20);
+    }
+
+    function closeCommandPalette() {
+      if (!commandPalette || !commandInput) return;
+      commandPalette.classList.remove("open");
+      commandPalette.setAttribute("aria-hidden", "true");
+      commandInput.value = "";
+      renderCommandPalette("");
+    }
+
+    function rerenderDashboardFromLatest() {
+      if (!latestDashboardPayload) return;
+      renderOverviewData(latestDashboardPayload);
+      renderBenchmarkData(latestDashboardPayload);
+      renderStatsData(latestDashboardPayload);
+      renderSelfCareData(latestDashboardPayload);
+      renderArchitecturePanels(latestDashboardPayload);
+      renderServicesData(latestDashboardPayload);
+      renderAgentData(latestDashboardPayload);
+      renderTasks(buildTasksFromDashboard(latestDashboardPayload));
+    }
+
+    function performDashboardRefresh() {
+      loadDashboardData();
+      makeToast("info", "Dashboard refresh", "Live observer data refresh requested.");
+    }
+
+    function toggleDashboardMode() {
+      dashboardMode = dashboardMode === "default" ? "debug" : "default";
+      setObserverSurfaceState("success", { refreshedAt: new Date().toISOString() });
+      rerenderDashboardFromLatest();
+      scheduleAutoRefresh();
+      saveDashboardState();
+      makeToast("info", "Mode switched", `Observer dashboard is now in ${dashboardMode} mode.`);
+    }
+
+    async function requestSelfCareRun(originLabel = "operator panel") {
+      await apiPost("/observer/actions/self-care/run");
+      makeToast("success", "Self-care started", `Bounded self-care run requested from the ${originLabel}.`);
+      window.setTimeout(loadDashboardData, 1200);
+    }
+
+    async function generateObserverReport() {
+      const result = await apiPost("/observer/reports/generate?limit=24");
+      await refreshArtifacts();
+      makeToast("success", "Report exported", `Observer report generated: ${result.filename || "report ready"}.`);
+    }
+
+    async function generateObserverJournal() {
+      const result = await apiPost("/observer/journal/generate");
+      await refreshArtifacts();
+      makeToast("success", "Journal generated", result?.entry?.title || "Observer journal entry generated.");
+    }
+
+    function scoreToY(score) {
+      const clamped = Math.max(0, Math.min(100, Number(score || 0)));
+      return Math.round(240 - (clamped * 1.8));
+    }
+
+    function buildSmoothPath(points) {
+      if (!points.length) return "";
+      if (points.length === 1) return `M${points[0][0]},${points[0][1]}`;
+      let d = `M${points[0][0]},${points[0][1]}`;
+      for (let i = 1; i < points.length; i += 1) {
+        const [x0, y0] = points[i - 1];
+        const [x1, y1] = points[i];
+        const cx1 = Math.round(x0 + (x1 - x0) / 2);
+        const cx2 = cx1;
+        d += ` C${cx1},${y0} ${cx2},${y1} ${x1},${y1}`;
+      }
+      return d;
+    }
+
+    async function apiGet(path) {
+      const response = await fetch(path, { headers: { "Accept": "application/json" } });
+      if (!response.ok) {
+        throw new Error(`${path} ${response.status}`);
+      }
+      return response.json();
+    }
+
+    async function apiPost(path, body) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!response.ok) {
+        let errorText = `${path} ${response.status}`;
+        try {
+          const payload = await response.json();
+          if (payload && payload.error) errorText = payload.error;
+        } catch (_) {}
+        throw new Error(errorText);
+      }
+      return response.json();
+    }
+
+    function bindDetailTriggers() {
+      detailTriggers = Array.from(document.querySelectorAll(".detail-trigger"));
+      detailTriggers.forEach((trigger) => {
+        if (trigger.dataset.detailBound === "true") {
+          return;
+        }
+        trigger.dataset.detailBound = "true";
+        trigger.addEventListener("click", () => {
+          openDetail(trigger.dataset.detailTitle || "Detail", trigger.dataset.detailBody || "");
+        });
+      });
+    }
+
+    function progressClass(task) {
+      if (task.state === "done") return "good";
+      if (task.state === "running") return "muted";
+      if (task.state === "warning" || task.state === "offline" || task.state === "degraded") return "warning";
+      return "warning";
+    }
+
+    function taskRowClass(task) {
+      if (task.state === "done") return "task-row done";
+      if (task.state === "running") return "task-row running";
+      return "task-row";
+    }
+
+    function matchesTaskFilter(task, filter) {
+      if (filter === "running") return task.state === "running";
+      if (filter === "attention") return task.state === "warning" || task.state === "offline" || task.state === "degraded";
+      if (filter === "done") return task.state === "done";
+      return true;
+    }
+
+    function normalizeServiceState(state) {
+      const normalized = String(state || "").toLowerCase();
+      if (["up", "online", "healthy"].includes(normalized)) return "online";
+      if (normalized === "watch") return "watch";
+      if (normalized === "degraded") return "degraded";
+      if (normalized === "restarting") return "restarting";
+      if (["offline", "down", "error"].includes(normalized)) return "offline";
+      return normalized || "unknown";
+    }
+
+    function matchesServiceFilter(service, filter) {
+      const state = normalizeServiceState(service?.state);
+      if (filter === "online") return state === "online";
+      if (filter === "watch") return state === "watch";
+      if (filter === "degraded") return state === "degraded";
+      if (filter === "restarting") return state === "restarting";
+      if (filter === "offline") return state === "offline";
+      if (filter === "owned") return Boolean(service?.owned);
+      return true;
+    }
+
+    function matchesServiceSearch(service, search) {
+      const query = String(search || "").trim().toLowerCase();
+      if (!query) return true;
+      const haystack = [
+        service?.name,
+        service?.id,
+        service?.action,
+        service?.message,
+        service?.state
+      ].join(" ").toLowerCase();
+      return haystack.includes(query);
+    }
+
+    function matchesAgentFilter(agent, filter) {
+      const state = String(agent?.state || "").toLowerCase();
+      if (filter === "online") return ["online", "idle", "busy"].includes(state);
+      if (filter === "attention") return ["degraded", "offline", "error", "restarting"].includes(state);
+      if (filter === "busy") return ["busy", "running"].includes(state);
+      return true;
+    }
+
+    function matchesAgentSearch(agent, search) {
+      const query = String(search || "").trim().toLowerCase();
+      if (!query) return true;
+      const haystack = [
+        agent?.agent_name,
+        agent?.agent_id,
+        agent?.pipeline_id,
+        agent?.manager_id,
+        agent?.status,
+        agent?.last_task_summary
+      ].join(" ").toLowerCase();
+      return haystack.includes(query);
+    }
+
+    function matchesAgentPipeline(agent, pipeline) {
+      const normalized = String(pipeline || "all").trim().toLowerCase();
+      if (!normalized || normalized === "all") return true;
+      return String(agent?.pipeline_id || "unassigned").trim().toLowerCase() === normalized;
+    }
+
+    function setObserverSurfaceState(kind, detail) {
+      if (observerModeState) observerModeState.textContent = dashboardMode;
+      if (observerModeMeta) {
+        observerModeMeta.textContent = dashboardMode === "debug"
+          ? "Debug mode refreshes faster and is allowed to reveal richer observer context."
+          : "Default mode favors concise operator summaries.";
+      }
+
+      if (kind === "loading") {
+        if (observerAPIState) {
+          observerAPIState.textContent = "Refreshing";
+          observerAPIState.className = "value idle";
+        }
+        if (observerAPIMeta) observerAPIMeta.textContent = "Observer dashboard data is being reloaded.";
+        if (observerNextRefreshMeta && nextRefreshAt) {
+          updateRefreshCountdown();
+        }
+        return;
+      }
+
+      if (kind === "success") {
+        if (observerAPIState) {
+          observerAPIState.textContent = "Connected";
+          observerAPIState.className = "value good";
+        }
+        if (observerAPIMeta) observerAPIMeta.textContent = "Live observer endpoints are providing dashboard data.";
+        if (observerRefreshState) observerRefreshState.textContent = formatDateTime(detail?.refreshedAt || new Date().toISOString());
+        if (observerRefreshMeta) observerRefreshMeta.textContent = `Auto-refresh cadence: ${dashboardMode === "debug" ? "12s" : "20s"}.`;
+        updateRefreshCountdown();
+        if (observerIssueState) {
+          observerIssueState.textContent = "None";
+          observerIssueState.className = "value good";
+        }
+        if (observerIssueMeta) observerIssueMeta.textContent = "No recent dashboard hydration failures.";
+        return;
+      }
+
+      setStatusLight(
+        statusCoreLight,
+        statusCoreValue,
+        "idle",
+        "fallback",
+        "Core runtime status is temporarily shown from fallback dashboard state."
+      );
+      setStatusLight(
+        statusObserverLight,
+        statusObserverValue,
+        "warn",
+        "fallback",
+        "Observer endpoints are unavailable, so the dashboard is using bounded fallback data."
+      );
+      setStatusLight(
+        statusAttentionLight,
+        statusAttentionValue,
+        "warn",
+        "review",
+        "Attention load cannot be confirmed live while the observer is in fallback mode."
+      );
+
+      if (observerAPIState) {
+        observerAPIState.textContent = "Fallback";
+        observerAPIState.className = "value warn";
+      }
+      if (observerAPIMeta) observerAPIMeta.textContent = "Observer endpoints failed; bounded fallback content is being shown.";
+      if (observerIssueState) {
+        observerIssueState.textContent = "Active";
+        observerIssueState.className = "value bad";
+      }
+      if (observerIssueMeta) observerIssueMeta.textContent = detail?.message || "Observer endpoints are currently unavailable.";
+      if (observerRefreshMeta) observerRefreshMeta.textContent = "Retrying on the normal dashboard refresh cadence.";
+      if (observerNextRefreshMeta) updateRefreshCountdown();
+    }
+
+    function updateTaskSummary(tasks) {
+      if (!taskSummary) return;
+      const counts = {
+        total: tasks.length,
+        running: tasks.filter((task) => task.state === "running").length,
+        attention: tasks.filter((task) => task.state === "warning" || task.state === "offline" || task.state === "degraded").length,
+        done: tasks.filter((task) => task.state === "done").length
+      };
+      taskSummary.innerHTML = `
+        <div class="task-stat"><strong>${counts.total}</strong> total</div>
+        <div class="task-stat"><strong>${counts.running}</strong> running</div>
+        <div class="task-stat"><strong>${counts.attention}</strong> attention</div>
+        <div class="task-stat"><strong>${counts.done}</strong> done</div>
+      `;
+      if (taskToolbarNote) {
+        taskToolbarNote.textContent = dashboardMode === "debug"
+          ? "Debug mode keeps the lane richer: more observer events, service drift, and agent trouble are pulled into the queue."
+          : "Running work stays visually muted until it either finishes cleanly or escalates.";
+      }
+    }
+
+    function renderTasks(tasks) {
+      if (!taskList) return;
+      currentTasks = tasks.slice();
+      updateTaskSummary(currentTasks);
+      const visibleTasks = currentTasks.filter((task) => matchesTaskFilter(task, currentTaskFilter));
+      if (visibleTasks.length) {
+        setPanelBadge(tasksPanelState, "good", "live");
+        if (tasksPanelMeta) tasksPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML(`${visibleTasks.length} tasks visible in the current filter`)}`;
+      } else {
+        setPanelBadge(tasksPanelState, "warn", "empty");
+        if (tasksPanelMeta) tasksPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("The selected task filter currently has nothing to show")}`;
+      }
+      taskList.innerHTML = visibleTasks.map((task, index) => {
+        const percent = Math.max(0, Math.min(100, Number(task.percent || 0)));
+        const sideLabel = task.sideLabel || `${percent}%`;
+        const taskLabel = compactLabel("Task", task.name, index);
+        return `
+          <article class="${taskRowClass(task)} entering" data-task-id="${escapeHTML(task.id)}" title="${escapeHTML(task.name)}">
+            <div class="task-icon">
+              <div class="task-check"><span class="task-check-mark">✓</span></div>
+            </div>
+            <div class="task-body">
+              <div class="task-name">${escapeHTML(taskLabel)}</div>
+              <div class="task-meta">${escapeHTML(task.meta)}</div>
+              <div class="task-context">
+                <span class="badge ${stateBadgeClass(task.state)}"><span class="dot"></span> ${escapeHTML(task.sourceLabel || "observer")}</span>
+                ${task.contextLabel ? `<span class="badge"><span class="dot"></span> ${escapeHTML(task.contextLabel)}</span>` : ""}
+              </div>
+              <div class="capsule-progress ${progressClass(task)} ${task.state === "running" ? "running" : ""}" style="--fill: ${percent}%"></div>
+            </div>
+            <div class="task-side">
+              <div class="task-state-tag">${escapeHTML(task.stateLabel)}</div>
+              <div class="mini">${escapeHTML(sideLabel)}</div>
+              <button class="task-detail-btn" type="button" data-task-detail="${escapeHTML(task.id)}">Read more...</button>
+            </div>
+          </article>
+        `;
+      }).join("") || `
+        <article class="task-row entering">
+          <div class="task-icon">
+            <div class="task-check"><span class="task-check-mark">✓</span></div>
+          </div>
+          <div class="task-body">
+            <div class="task-name">No tasks in this view</div>
+            <div class="task-meta">The selected filter currently has nothing to show.</div>
+            <div class="task-context">
+              <span class="badge warn"><span class="dot"></span> filtered</span>
+            </div>
+            <div class="capsule-progress muted" style="--fill: 0%"></div>
+          </div>
+          <div class="task-side">
+            <div class="task-state-tag">Empty</div>
+            <div class="mini">0%</div>
+          </div>
+        </article>
+      `;
+      taskList.querySelectorAll("[data-task-detail]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const task = currentTasks.find((item) => item.id === button.dataset.taskDetail);
+          if (!task) return;
+          openDetail(task.detailTitle || task.name || "Task detail", task.detailBody || task.meta || "");
+        });
+      });
+    }
+
+    function buildTasksFromDashboard(data) {
+      const tasks = [];
+      const services = Array.isArray(data?.services) ? data.services : [];
+      const agents = Array.isArray(data?.agents) ? data.agents : [];
+      const events = Array.isArray(data?.events) ? data.events : [];
+
+      services.slice(0, 2).forEach((service, index) => {
+        const state = String(service.state || "watch").toLowerCase();
+        const percent = state === "online" ? 96 : state === "restarting" ? 48 : state === "degraded" ? 36 : 18;
+        tasks.push({
+          id: `service-${service.id || index}`,
+          name: `${service.name || service.id || "service"} oversight`,
+          meta: service.message || `State is currently ${state}.`,
+          percent,
+          state: state === "online" ? "done" : state === "restarting" ? "running" : "warning",
+          stateLabel: state === "online" ? "Completed" : state === "restarting" ? "Restarting" : state,
+          sideLabel: state === "online" ? "synced" : `${percent}%`,
+          sourceLabel: "service",
+          contextLabel: service.id || service.name || "runtime",
+          detailTitle: service.name || service.id || "Service oversight",
+          detailBody: `State: ${service.state || "unknown"}\nOwned: ${service.owned ? "yes" : "no"}\nAction: ${service.action || "none"}\nMessage: ${service.message || "No service detail message recorded."}`
+        });
+      });
+
+      agents.slice(0, 3).forEach((agent, index) => {
+        const state = String(agent.state || "running").toLowerCase();
+        const percent = state === "idle" ? 64 : state === "online" ? 82 : state === "busy" ? 54 : state === "offline" ? 16 : 34;
+        tasks.push({
+          id: `agent-${agent.agent_id || index}`,
+          name: `${agent.agent_name || agent.agent_id || "agent"} lane`,
+          meta: agent.last_task_summary || agent.pipeline_id || "No current task summary recorded.",
+          percent,
+          state: state === "offline" || state === "degraded" ? "warning" : state === "idle" ? "running" : state === "online" ? "done" : "running",
+          stateLabel: state === "offline" ? "Offline" : state === "degraded" ? "Degraded" : state === "online" ? "Ready" : state,
+          sideLabel: agent.last_seen_at ? "seen" : `${percent}%`,
+          sourceLabel: "agent",
+          contextLabel: agent.pipeline_id || agent.manager_id || "pipeline",
+          detailTitle: agent.agent_name || agent.agent_id || "Agent lane",
+          detailBody: `State: ${agent.state || "unknown"}\nPipeline: ${agent.pipeline_id || "unassigned"}\nManager: ${agent.manager_id || "none"}\nStatus: ${agent.status || agent.last_task_summary || "No status summary recorded."}\nLast seen: ${formatRelative(agent.last_seen_at || agent.updated_at)}`
+        });
+      });
+
+      const eventLimit = dashboardMode === "debug" ? 8 : 4;
+      if (events.length) {
+        events.slice(0, eventLimit).forEach((event, index) => {
+          tasks.push({
+            id: `event-${index}`,
+            name: event.event_type || "observer event",
+            meta: dashboardMode === "debug"
+              ? `${event.message || "Observer event"}${event.service_id ? ` [${event.service_id}]` : ""}`
+              : (event.message || "Observer event"),
+            percent: event.severity === "error" ? 28 : 74,
+            state: event.severity === "error" || event.severity === "critical" ? "warning" : "done",
+            stateLabel: event.severity || "info",
+            sideLabel: event.created_at ? formatRelative(event.created_at) : undefined,
+            sourceLabel: "event",
+            contextLabel: event.service_id || event.event_type || "observer",
+            detailTitle: event.event_type || "Observer event",
+            detailBody: `Severity: ${event.severity || "info"}\nService: ${event.service_id || "n/a"}\nWhen: ${formatDateTime(event.created_at || event.generated_at || event.updated_at)}\nMessage: ${event.message || "Observer event"}`
+          });
+        });
+      }
+
+      if (!tasks.length) {
+        tasks.push(
+          {
+            id: "fallback-1",
+            name: "Observer event hydration",
+            meta: "Waiting on live observer data to populate the task lane.",
+            percent: 24,
+            state: "running",
+            stateLabel: "Running",
+            sourceLabel: "observer",
+            contextLabel: "loading",
+            detailTitle: "Observer event hydration",
+            detailBody: "The task lane is waiting for live observer/dashboard data before it can replace this bounded fallback row."
+          },
+          {
+            id: "fallback-2",
+            name: "Agent presence sync",
+            meta: "Queued summaries stay grayed out until the observer confirms their latest state.",
+            percent: 12,
+            state: "running",
+            stateLabel: "Queued",
+            sourceLabel: "observer",
+            contextLabel: "sync",
+            detailTitle: "Agent presence sync",
+            detailBody: "Agent summaries have not been hydrated yet, so the operator lane keeps a muted placeholder until real data arrives."
+          }
+        );
+      }
+
+      return tasks;
+    }
+
+    function renderOverviewData(data) {
+      const overview = data?.overview;
+      const services = Array.isArray(data?.services) ? data.services : [];
+      const agents = Array.isArray(data?.agents) ? data.agents : [];
+      const servicesUp = services.filter((service) => ["up", "online", "healthy"].includes(String(service.state || "").toLowerCase())).length;
+      const agentsOnline = agents.filter((agent) => ["online", "idle", "busy"].includes(String(agent.state || "").toLowerCase())).length;
+      const attentionCount = services.filter((service) => ["degraded", "offline", "down", "watch", "restarting", "error"].includes(String(service.state || "").toLowerCase())).length +
+        agents.filter((agent) => ["degraded", "offline", "error"].includes(String(agent.state || "").toLowerCase())).length;
+      const totalTracked = services.length + agents.length;
+      const attentionPercent = totalTracked ? Math.round((attentionCount / totalTracked) * 100) : 0;
+      const observerScore = Number(overview?.score ?? 0);
+      const coreState = services.length
+        ? (servicesUp === services.length ? "up" : (servicesUp > 0 ? "watch" : "down"))
+        : "idle";
+      const observerState = !overview
+        ? "idle"
+        : (observerScore >= 80 ? "healthy" : (observerScore >= 55 ? "watch" : "down"));
+      const attentionState = attentionCount === 0 ? "healthy" : (attentionCount >= 3 ? "down" : "watch");
+
+      setStatusLight(
+        statusCoreLight,
+        statusCoreValue,
+        coreState,
+        services.length ? `${servicesUp}/${services.length} up` : "awaiting",
+        services.length
+          ? `${servicesUp} of ${services.length} tracked services are currently up.`
+          : "Waiting for tracked service state from the observer."
+      );
+      setStatusLight(
+        statusObserverLight,
+        statusObserverValue,
+        observerState,
+        overview ? `${observerScore}/100` : "awaiting",
+        overview
+          ? `Observer health score is ${observerScore} and summary state is ${overview?.status || "available"}.`
+          : "Waiting for the observer overview payload."
+      );
+      setStatusLight(
+        statusAttentionLight,
+        statusAttentionValue,
+        attentionState,
+        attentionCount ? `${attentionCount} open` : "clear",
+        attentionCount
+          ? `${attentionCount} service or agent states currently need attention.`
+          : "No tracked service or agent states currently need attention."
+      );
+
+      if (metricServicesUp) metricServicesUp.textContent = String(servicesUp);
+      if (metricServicesMeta) metricServicesMeta.textContent = services.length ? `${services.length} tracked services in observer state.` : "No tracked services yet.";
+      if (metricAgentsOnline) metricAgentsOnline.textContent = String(agentsOnline);
+      if (metricAgentsMeta) metricAgentsMeta.textContent = agents.length ? `${agents.length} summarized agents across active pipelines.` : "No summarized agents yet.";
+      if (metricAttention) metricAttention.textContent = String(attentionCount);
+      if (metricAttentionMeta) metricAttentionMeta.textContent = attentionCount ? "Degraded/offline service and agent states require review." : "No observer-tracked attention states right now.";
+      if (heroSummary) {
+        heroSummary.textContent = overview?.summary || "Spiderweb’s observer stays above services, tracks drift, logs self-care outcomes, and exposes the system state needed for operators.";
+      }
+      if (profileModeTitle) {
+        profileModeTitle.textContent = dashboardMode === "debug" ? "Debug Dashboard" : "Default Dashboard";
+      }
+      if (profileModeSubtitle) {
+        profileModeSubtitle.textContent = overview?.status || "Observer-backed operator surface";
+      }
+      if (profileStatusPill) {
+        const liveState = attentionCount > 0 ? "● Attention" : "● Live";
+        profileStatusPill.textContent = liveState;
+      }
+      if (overviewRecommendations) {
+        const recommendations = Array.isArray(overview?.recommendations) ? overview.recommendations.slice(0, 3) : [];
+        overviewRecommendations.innerHTML = recommendations.length ? recommendations.map((item, index) => `
+          <div class="recommendation-item">
+            <div class="recommendation-mark">${index + 1}</div>
+            <div class="mini">${escapeHTML(item)}</div>
+          </div>
+        `).join("") : `
+          <div class="recommendation-item">
+            <div class="recommendation-mark">1</div>
+            <div class="mini">${escapeHTML(overview?.summary || "No active observer recommendations right now.")}</div>
+          </div>
+        `;
+      }
+      if (gaugeHealthValue) gaugeHealthValue.textContent = String(overview?.score ?? 0);
+      if (gaugeHealthMeta) gaugeHealthMeta.textContent = overview?.summary || "Waiting for observer overview data.";
+      setGaugeArc(
+        gaugeHealthArc,
+        overview?.score ?? 0,
+        "rgba(255, 216, 117, 0.96)",
+        "rgba(255, 116, 72, 0.9)"
+      );
+      if (gaugeAttentionValue) gaugeAttentionValue.textContent = `${attentionPercent}%`;
+      if (gaugeAttentionMeta) gaugeAttentionMeta.textContent = totalTracked
+        ? `${attentionCount} of ${totalTracked} tracked services and agents currently need attention.`
+        : "Derived from degraded/offline service and agent states.";
+      setGaugeArc(
+        gaugeAttentionArc,
+        attentionPercent,
+        "rgba(255, 207, 145, 0.92)",
+        attentionPercent > 35 ? "rgba(255, 97, 71, 0.92)" : "rgba(255, 156, 86, 0.9)"
+      );
+      if (metricSelfcareDelta) {
+        const cycles = Array.isArray(data?.self_care?.cycles) ? data.self_care.cycles : [];
+        const latest = cycles[0];
+        const delta = Number(latest?.score_delta || 0);
+        metricSelfcareDelta.textContent = delta > 0 ? `+${delta}` : String(delta || 0);
+        if (metricSelfcareMeta) {
+          metricSelfcareMeta.textContent = latest ? (latest.post_care_summary || latest.summary || "Latest self-care cycle recorded.") : "No self-care cycles recorded yet.";
+        }
+        if (gaugeSelfCareValue) gaugeSelfCareValue.textContent = delta > 0 ? `+${delta}` : String(delta || 0);
+        if (gaugeSelfCareMeta) gaugeSelfCareMeta.textContent = latest
+          ? (latest.post_care_summary || latest.summary || "Latest self-care cycle recorded.")
+          : "Latest self-care delta from the most recent recorded cycle.";
+        setGaugeArc(
+          gaugeSelfCareArc,
+          Math.min(100, Math.abs(delta) * 8),
+          delta >= 0 ? "rgba(17, 239, 211, 0.9)" : "rgba(255, 156, 86, 0.9)",
+          delta >= 0 ? "rgba(125, 255, 224, 0.82)" : "rgba(255, 97, 71, 0.9)"
+        );
+      } else if (metricSelfcareMeta && overview) {
+        metricSelfcareMeta.textContent = overview.summary || "Observer overview unavailable.";
+      }
+      if (!data?.overview && gaugeHealthValue) {
+        gaugeHealthValue.textContent = "0";
+        if (gaugeHealthMeta) gaugeHealthMeta.textContent = "Waiting for observer overview data.";
+        setGaugeArc(gaugeHealthArc, 0, "rgba(255, 216, 117, 0.96)", "rgba(255, 116, 72, 0.9)");
+      }
+      if (!data?.overview && overviewRecommendations) {
+        overviewRecommendations.innerHTML = `
+          <div class="recommendation-item">
+            <div class="recommendation-mark">1</div>
+            <div class="mini">Overview recommendations are unavailable while the dashboard is waiting for live observer data.</div>
+          </div>
+        `;
+      }
+      if (!data?.self_care?.cycles?.length && gaugeSelfCareValue) {
+        gaugeSelfCareValue.textContent = "0";
+        if (gaugeSelfCareMeta) gaugeSelfCareMeta.textContent = "Latest self-care delta from the most recent recorded cycle.";
+        setGaugeArc(gaugeSelfCareArc, 0, "rgba(17, 239, 211, 0.9)", "rgba(125, 255, 224, 0.82)");
+      }
+    }
+
+    function renderAgentSummaryData(summary) {
+      latestAgentSummary = summary || null;
+      if (!agentSummaryGrid) return;
+      const byState = summary?.by_state || {};
+      const byPipeline = summary?.by_pipeline || {};
+      const busiestPipeline = Object.entries(byPipeline).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+      agentSummaryGrid.innerHTML = summary ? `
+        <div class="mini-card">
+          <div class="label">Total agents</div>
+          <div class="value good" style="font-size:1.2rem;">${escapeHTML(String(summary.total || 0))}</div>
+          <div class="mini">Observer-tracked agent summaries currently loaded.</div>
+        </div>
+        <div class="mini-card">
+          <div class="label">Online / Busy</div>
+          <div class="value idle" style="font-size:1.2rem;">${escapeHTML(String((byState.online || 0) + (byState.idle || 0) + (byState.busy || 0)))}</div>
+          <div class="mini">Combined online, idle, and busy agent presence.</div>
+        </div>
+        <div class="mini-card">
+          <div class="label">Attention states</div>
+          <div class="value warn" style="font-size:1.2rem;">${escapeHTML(String((byState.degraded || 0) + (byState.offline || 0) + (byState.error || 0) + (byState.restarting || 0)))}</div>
+          <div class="mini">Degraded, offline, error, and restarting agent counts.</div>
+        </div>
+        <div class="mini-card">
+          <div class="label">Busiest pipeline</div>
+          <div class="value good" style="font-size:1rem;">${escapeHTML(busiestPipeline?.[0] || "n/a")}</div>
+          <div class="mini">${busiestPipeline ? `${escapeHTML(String(busiestPipeline[1]))} tracked agents currently map here.` : "No pipeline summaries recorded yet."}</div>
+        </div>
+      ` : `
+        <div class="mini-card">
+          <div class="label">Agent summary</div>
+          <div class="value idle" style="font-size:1.15rem;">Unavailable</div>
+          <div class="mini">The observer agent summary endpoint has not returned data yet.</div>
+        </div>
+      `;
+    }
+
+    function renderBenchmarkData(data) {
+      const benchmarks = data?.benchmarks;
+      const current = benchmarks?.current;
+      const baseline = benchmarks?.baseline;
+      const cycles = Array.isArray(data?.self_care?.cycles) ? data.self_care.cycles : [];
+      const latest = cycles[0];
+      const delta = Number(latest?.score_delta || 0);
+      const benchmarkMoment = latest?.post_care_at || latest?.timestamp || current?.timestamp || baseline?.timestamp;
+      const baselineScore = Number(baseline?.score ?? latest?.baseline_score ?? 0);
+      const preScore = Number(latest?.pre_check_score ?? current?.score ?? 0);
+      const postScore = Number(latest?.post_care_score ?? latest?.score ?? current?.score ?? 0);
+      const currentScore = Number(current?.score ?? postScore ?? 0);
+
+      if (benchmarkBaselineScore) benchmarkBaselineScore.textContent = String(baseline?.score ?? latest?.baseline_score ?? "n/a");
+      if (benchmarkBaselineSummary) benchmarkBaselineSummary.textContent = baseline?.summary || latest?.baseline_summary || "No baseline benchmark summary available.";
+      if (benchmarkPreScore) benchmarkPreScore.textContent = String(latest?.pre_check_score ?? current?.score ?? "n/a");
+      if (benchmarkPreSummary) benchmarkPreSummary.textContent = latest?.pre_check_summary || current?.summary || "No current pre-check summary available.";
+      if (benchmarkPostScore) benchmarkPostScore.textContent = String(latest?.post_care_score ?? latest?.score ?? current?.score ?? "n/a");
+      if (benchmarkPostSummary) benchmarkPostSummary.textContent = latest?.post_care_summary || latest?.summary || "No post-care summary available.";
+      if (chartPrimaryPath) {
+        const primaryPoints = [
+          [40, scoreToY(baselineScore)],
+          [280, scoreToY(preScore)],
+          [520, scoreToY(postScore)],
+          [960, scoreToY(currentScore)]
+        ];
+        chartPrimaryPath.setAttribute("d", buildSmoothPath(primaryPoints));
+      }
+      if (chartSecondaryPath) {
+        const midA = Math.round((baselineScore + preScore) / 2);
+        const midB = Math.round((postScore + currentScore) / 2);
+        const secondaryPoints = [
+          [40, scoreToY(midA)],
+          [360, scoreToY(Math.round((preScore + postScore) / 2))],
+          [680, scoreToY(midB)],
+          [960, scoreToY(currentScore)]
+        ];
+        chartSecondaryPath.setAttribute("d", buildSmoothPath(secondaryPoints));
+      }
+      if (benchmarkSparkTag) {
+        const stamp = benchmarkMoment ? formatDateTime(benchmarkMoment) : "No cycle yet";
+        const deltaLabel = Number.isFinite(delta) && delta !== 0 ? `${delta > 0 ? "+" : ""}${delta}` : "0";
+        benchmarkSparkTag.textContent = `${stamp} delta ${deltaLabel}`;
+      }
+      if (benchmarkFooterNote) {
+        benchmarkFooterNote.textContent = latest
+          ? `Latest self-care cycle compared pre-check ${latest.pre_check_score ?? "n/a"} against post-care ${latest.post_care_score ?? latest.score ?? "n/a"} with a delta of ${delta > 0 ? "+" : ""}${delta}.`
+          : "The observer tracks runtime drift against the startup baseline and preserves benchmark state before and after self-care.";
+      }
+      if (!benchmarks?.current && !benchmarks?.baseline && !latest) {
+        if (chartPrimaryPath) {
+          chartPrimaryPath.setAttribute("d", buildSmoothPath([[40, 210], [280, 210], [520, 210], [960, 210]]));
+        }
+        if (chartSecondaryPath) {
+          chartSecondaryPath.setAttribute("d", buildSmoothPath([[40, 170], [360, 170], [680, 170], [960, 170]]));
+        }
+      }
+    }
+
+    function renderStatsData(data) {
+      const stats = data?.stats_24h;
+      const events = Array.isArray(data?.events) ? data.events.slice(0, dashboardMode === "debug" ? 5 : 3) : [];
+      if (stats || events.length) {
+        setPanelBadge(statsPanelState, "good", dashboardMode === "debug" ? "debug live" : "live");
+        if (statsPanelMeta) {
+          statsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML(`${events.length} timeline items visible${stats ? ` · ${stats.total_events ?? 0} total 24h events` : ""}`)}`;
+        }
+      } else {
+        setPanelBadge(statsPanelState, "idle", "awaiting data");
+        if (statsPanelMeta) {
+          statsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("24h event summaries are not loaded yet")}`;
+        }
+      }
+      if (statsErrors) statsErrors.textContent = String(stats?.errors ?? 0);
+      if (statsErrorsMeta) statsErrorsMeta.textContent = dashboardMode === "debug"
+        ? "Debug mode shows a wider slice of observer-tracked 24h errors and event chronology."
+        : "Observer-tracked errors across the last 24 hours.";
+      if (statsCritical) statsCritical.textContent = String(stats?.critical_events ?? stats?.critical ?? 0);
+      if (statsCriticalMeta) statsCriticalMeta.textContent = dashboardMode === "debug"
+        ? "Critical observer events over the last 24 hours with a deeper event slice."
+        : "Critical observer events over the last 24 hours.";
+      if (statsEventsTimeline) {
+        statsEventsTimeline.innerHTML = events.length ? events.map((event) => `
+          <div class="timeline-item">
+            <div class="mini">${escapeHTML(formatDateTime(event.created_at || event.generated_at || event.updated_at))}</div>
+            <div class="mini">${escapeHTML(dashboardMode === "debug"
+              ? `${event.message || event.event_type || "observer event"}${event.service_id ? ` [${event.service_id}]` : ""}${event.severity ? ` · ${event.severity}` : ""}`
+              : (event.message || event.event_type || "observer event"))}</div>
+            <button class="detail-trigger" type="button"
+              data-detail-title="${escapeHTML(event.event_type || "Observer event")}"
+              data-detail-body="${escapeHTML(`Severity: ${event.severity || "info"}\nService: ${event.service_id || "n/a"}\nWhen: ${formatDateTime(event.created_at || event.generated_at || event.updated_at)}\nMessage: ${event.message || event.event_type || "observer event"}`)}">
+              Read more...
+            </button>
+          </div>
+        `).join("") : `
+          <div class="timeline-item">
+            <div class="mini">No recent observer events</div>
+            <div class="mini">The 24-hour event timeline will appear here once data is recorded.</div>
+          </div>
+        `;
+        bindDetailTriggers();
+      }
+    }
+
+    function renderSelfCareData(data) {
+      const cycles = Array.isArray(data?.self_care?.cycles) ? data.self_care.cycles.slice(0, 3) : [];
+      if (cycles.length) {
+        setPanelBadge(selfcarePanelState, "good", "live");
+        if (selfcarePanelMeta) {
+          selfcarePanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML(`${cycles.length} recent self-care cycles are visible in the operator timeline`)}`;
+        }
+      } else {
+        setPanelBadge(selfcarePanelState, "idle", "awaiting data");
+        if (selfcarePanelMeta) {
+          selfcarePanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("self-care cycle history is not loaded yet")}`;
+        }
+      }
+      if (selfcareTimeline) {
+        selfcareTimeline.innerHTML = cycles.length ? cycles.map((cycle) => `
+          <div class="timeline-item">
+            <div class="mini">${escapeHTML(formatDateTime(cycle.post_care_at || cycle.timestamp || cycle.pre_check_at))}</div>
+            <div class="mini">${escapeHTML(cycle.post_care_summary || cycle.summary || "Self-care cycle recorded.")}</div>
+            <button class="detail-trigger" type="button"
+              data-detail-title="${escapeHTML(`Self-care cycle ${cycle.id || ""}`.trim())}"
+              data-detail-body="${escapeHTML(`Baseline: ${cycle.baseline_score || "n/a"}\nPre-check: ${cycle.pre_check_score || "n/a"}\nPost-care: ${cycle.post_care_score || cycle.score || "n/a"}\nDelta: ${cycle.score_delta || 0}\nAction: ${cycle.last_remediation_action || "none"}\nWhen: ${formatDateTime(cycle.post_care_at || cycle.timestamp || cycle.pre_check_at)}\nSummary: ${cycle.post_care_summary || cycle.summary || "Self-care cycle recorded."}`)}">
+              Read more...
+            </button>
+          </div>
+        `).join("") : `
+          <div class="timeline-item">
+            <div class="mini">No self-care cycles yet</div>
+            <div class="mini">Run bounded self-care to populate this timeline.</div>
+          </div>
+        `;
+        bindDetailTriggers();
+      }
+    }
+
+    function renderArchitecturePanels(data) {
+      const services = Array.isArray(data?.services) ? data.services : [];
+      const agents = Array.isArray(data?.agents) ? data.agents : [];
+      const events = Array.isArray(data?.events) ? data.events : [];
+      const cycles = Array.isArray(data?.self_care?.cycles) ? data.self_care.cycles : [];
+
+      if (services.length || agents.length || events.length) {
+        setPanelBadge(flowPanelState, "good", dashboardMode === "debug" ? "debug live" : "live");
+        if (flowPanelMeta) {
+          flowPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML(`${services.length} services, ${agents.length} agents, ${events.length} recent events, ${cycles.length} recent self-care cycles`)}`;
+        }
+      } else {
+        setPanelBadge(flowPanelState, "idle", "awaiting data");
+        if (flowPanelMeta) {
+          flowPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("live flow counts will appear here")}`;
+        }
+      }
+
+      if (storageSystemMeta) {
+        storageSystemMeta.textContent = services.length || events.length || cycles.length
+          ? `Tracking ${services.length} services, ${events.length} recent events, and ${cycles.length} recent self-care cycles in the control-plane view.`
+          : "system.db summaries will appear here.";
+      }
+      if (storageAgentMeta) {
+        storageAgentMeta.textContent = agents.length
+          ? `Tracking ${agents.length} summarized agents with pipeline presence and task-state detail in the operator view.`
+          : "agent.db summaries will appear here.";
+      }
+    }
+
+    function renderServicesData(data) {
+      const allServices = Array.isArray(data?.services) ? data.services : [];
+      const services = allServices
+        .filter((service) => matchesServiceFilter(service, currentServiceFilter))
+        .filter((service) => matchesServiceSearch(service, currentServiceSearch))
+        .slice(0, 6);
+      const restartable = allServices.filter((service) => Boolean(service.owned)).length;
+      if (allServices.length) {
+        setPanelBadge(servicesPanelState, services.length ? "good" : "warn", services.length ? "live" : "filtered");
+        if (servicesPanelMeta) {
+          const filterLabel = currentServiceFilter === "all" ? "all states" : currentServiceFilter;
+          const scope = currentServiceSearch ? `${services.length} service cards match "${currentServiceSearch}" in ${filterLabel}` : `${services.length} service cards visible in ${filterLabel}`;
+          servicesPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML(services.length ? scope : "The current service filter/search hides the loaded services")}`;
+        }
+      } else {
+        setPanelBadge(servicesPanelState, "idle", "awaiting data");
+        if (servicesPanelMeta) servicesPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("service summaries are not loaded yet")}`;
+      }
+      if (serviceCount) serviceCount.textContent = String(allServices.length);
+      if (serviceCountMeta) serviceCountMeta.textContent = allServices.length ? `Showing ${services.length} service cards in the current filter.` : "No service summaries recorded yet.";
+      if (restartableCount) restartableCount.textContent = String(restartable);
+      if (restartableCountMeta) restartableCountMeta.textContent = restartable ? "Owned services can accept bounded restart requests." : "No restartable owned services detected.";
+      if (!serviceGrid) return;
+      serviceGrid.innerHTML = services.length ? services.map((service, index) => {
+        const serviceName = service.name || service.id || "service";
+        const serviceLabel = compactLabel("Service", serviceName, index);
+        const serviceBadgeClass = stateBadgeClass(service.state);
+        const serviceMeter = stateMeterPercent(service.state);
+        const serviceDetail = dashboardMode === "debug"
+          ? `State: ${service.state || "unknown"}\nOwned: ${service.owned ? "yes" : "no"}\nRunning: ${service.running ? "yes" : "no"}\nAction: ${service.action || "none"}\nPID file: ${service.pid_file || "n/a"}\nUpdated: ${formatDateTime(service.updated_at)}\nMessage: ${service.message || "No service detail message recorded."}`
+          : `State: ${service.state || "unknown"}\nOwned: ${service.owned ? "yes" : "no"}\nAction: ${service.action || "none"}\nMessage: ${service.message || "No service detail message recorded."}`;
+        return `
+        <article class="service-card">
+          <div class="rowline">
+            <div class="service-name" title="${escapeHTML(serviceName)}">${escapeHTML(serviceLabel)}</div>
+            <span class="badge ${serviceBadgeClass}"><span class="dot"></span> ${escapeHTML(service.state || "unknown")}</span>
+          </div>
+          <div class="mini-meter ${serviceBadgeClass}" style="--meter-fill:${serviceMeter}%"></div>
+          <div class="rowline mini"><span>Owned</span><span>${service.owned ? "yes" : "no"}</span></div>
+          <div class="rowline mini"><span>Action</span><span>${escapeHTML(service.action || "none")}</span></div>
+          <div class="rowline mini"><span>Message</span><span>${escapeHTML(service.message || "No service detail message recorded.")}</span></div>
+          <div class="controls" style="margin-top:10px;">
+            <button class="detail-trigger" type="button"
+              data-detail-title="${escapeHTML(serviceName)}"
+              data-detail-body="${escapeHTML(serviceDetail)}">
+              Read more...
+            </button>
+            <button class="btn" type="button" data-service-restart="${escapeHTML(service.id || "")}" ${service.owned ? "" : "disabled"}>Restart</button>
+          </div>
+        </article>
+      `;
+      }).join("") : `
+        <article class="service-card">
+          <div class="service-name">${allServices.length ? "No services in this view" : "No services yet"}</div>
+          <div class="mini-meter warn" style="--meter-fill:0%"></div>
+          <div class="rowline mini"><span>State</span><span>waiting</span></div>
+          <div class="rowline mini"><span>Message</span><span>${allServices.length ? "The active service filter hides the current service summaries." : "Observer services will populate this panel."}</span></div>
+        </article>
+      `;
+      serviceGrid.querySelectorAll("[data-service-restart]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const service = button.dataset.serviceRestart;
+          if (!service) return;
+          try {
+            await apiPost("/observer/actions/restart", { service });
+            makeToast("success", "Restart requested", `${service} restart was requested from the services panel.`);
+            window.setTimeout(loadDashboardData, 1000);
+          } catch (error) {
+            makeToast("error", "Restart failed", error.message);
+          }
+        });
+      });
+      bindDetailTriggers();
+    }
+
+    function renderAgentData(data) {
+      const allAgents = Array.isArray(data?.agents) ? data.agents : [];
+      if (agentPipelineSelect) {
+        const pipelines = Array.from(new Set(allAgents.map((agent) => String(agent.pipeline_id || "unassigned").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        const desiredValue = currentAgentPipeline || "all";
+        agentPipelineSelect.innerHTML = `
+          <option value="all">All pipelines</option>
+          ${pipelines.map((pipeline) => `<option value="${escapeHTML(pipeline)}">${escapeHTML(pipeline)}</option>`).join("")}
+        `;
+        agentPipelineSelect.value = pipelines.includes(desiredValue) || desiredValue === "all" ? desiredValue : "all";
+        if (agentPipelineSelect.value !== desiredValue) {
+          currentAgentPipeline = agentPipelineSelect.value;
+          scheduleDashboardStateSave();
+        }
+      }
+      const agents = allAgents
+        .filter((agent) => matchesAgentFilter(agent, currentAgentFilter))
+        .filter((agent) => matchesAgentPipeline(agent, currentAgentPipeline))
+        .filter((agent) => matchesAgentSearch(agent, currentAgentSearch))
+        .slice(0, 6);
+      if (allAgents.length) {
+        setPanelBadge(agentsPanelState, agents.length ? "good" : "warn", agents.length ? "live" : "filtered");
+        if (agentsPanelMeta) {
+          const filterLabel = currentAgentFilter === "all" ? "all states" : currentAgentFilter;
+          const pipelineLabel = currentAgentPipeline === "all" ? "all pipelines" : currentAgentPipeline;
+          const scope = currentAgentSearch
+            ? `${agents.length} agent cards match "${currentAgentSearch}" in ${filterLabel} · ${pipelineLabel}`
+            : `${agents.length} agent cards visible in ${filterLabel} · ${pipelineLabel}`;
+          agentsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML(agents.length ? scope : "The current agent filter/search hides the loaded summaries")}`;
+        }
+      } else {
+        setPanelBadge(agentsPanelState, "idle", "awaiting data");
+        if (agentsPanelMeta) agentsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("agent summaries are not loaded yet")}`;
+      }
+      if (!agentGrid) return;
+      agentGrid.innerHTML = agents.length ? agents.map((agent) => {
+        const agentName = agent.agent_name || agent.agent_id || "agent";
+        const agentBadgeClass = stateBadgeClass(agent.state);
+        const agentMeter = stateMeterPercent(agent.state);
+        const agentDetail = dashboardMode === "debug"
+          ? `State: ${agent.state || "unknown"}\nPipeline: ${agent.pipeline_id || "unassigned"}\nManager: ${agent.manager_id || "none"}\nChannel: ${agent.channel || "n/a"}\nChat: ${agent.chat_id || "n/a"}\nStatus: ${agent.status || agent.last_task_summary || "No status summary recorded."}\nLast error: ${agent.last_error || "none"}\nUpdated: ${formatDateTime(agent.updated_at)}\nLast seen: ${formatRelative(agent.last_seen_at || agent.updated_at)}`
+          : `State: ${agent.state || "unknown"}\nPipeline: ${agent.pipeline_id || "unassigned"}\nManager: ${agent.manager_id || "none"}\nStatus: ${agent.status || agent.last_task_summary || "No status summary recorded."}\nLast seen: ${formatRelative(agent.last_seen_at || agent.updated_at)}`;
+        return `
+        <article class="glass agent-card">
+          <div class="agent-head">
+            <div class="agent-name" title="${escapeHTML(agentName)}">${escapeHTML(agentName)}</div>
+            <span class="badge ${agentBadgeClass}"><span class="dot"></span> ${escapeHTML(agent.state || "unknown")}</span>
+          </div>
+          <div class="mini-meter ${agentBadgeClass}" style="--meter-fill:${agentMeter}%"></div>
+          <div class="rowline mini"><span>Pipeline</span><span>${escapeHTML(agent.pipeline_id || "unassigned")}</span></div>
+          <div class="rowline mini"><span>Manager</span><span>${escapeHTML(agent.manager_id || "none")}</span></div>
+          <div class="rowline mini"><span>Status</span><span>${escapeHTML(agent.status || agent.last_task_summary || "No status summary recorded.")}</span></div>
+          <div class="rowline mini"><span>Last seen</span><span>${escapeHTML(formatRelative(agent.last_seen_at || agent.updated_at))}</span></div>
+          <div class="controls" style="margin-top:10px; gap:6px;">
+            <button class="detail-trigger" type="button"
+              data-detail-title="${escapeHTML(agentName)}"
+              data-detail-body="${escapeHTML(agentDetail)}">
+              Read more...
+            </button>
+            ${["offline", "degraded"].includes(String(agent.state || "").toLowerCase()) ? `<button class="btn" type="button" data-restart-agent="${escapeHTML(agent.agent_id || agent.agent_name || "")}" style="font-size:0.78rem; padding:6px 10px;">Restart</button>` : ""}
+          </div>
+        </article>
+      `;
+      }).join("") : `
+        <article class="glass agent-card">
+          <div class="agent-head">
+            <div class="agent-name">${allAgents.length ? "No agents in this view" : "No agents yet"}</div>
+            <span class="badge warn"><span class="dot"></span> Awaiting data</span>
+          </div>
+          <div class="mini-meter warn" style="--meter-fill:0%"></div>
+          <div class="rowline mini"><span>Pipeline</span><span>n/a</span></div>
+          <div class="rowline mini"><span>Manager</span><span>n/a</span></div>
+          <div class="rowline mini"><span>Status</span><span>${allAgents.length ? "The active agent filter hides the current summaries." : "Observer agent summaries have not been recorded yet."}</span></div>
+          <div class="rowline mini"><span>Last seen</span><span>unknown</span></div>
+        </article>
+      `;
+      agentGrid.querySelectorAll("[data-restart-agent]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const serviceId = btn.dataset.restartAgent;
+          if (!serviceId) return;
+          try {
+            const result = await apiPost("/observer/actions/restart", { service: serviceId });
+            makeToast("success", "Restart requested", `Restart requested for ${serviceId}.`);
+            window.setTimeout(loadDashboardData, 1200);
+          } catch (error) {
+            makeToast("error", "Restart failed", error.message);
+          }
+        });
+      });
+      bindDetailTriggers();
+    }
+
+    async function refreshArtifacts() {
+      try {
+        const [latestReport, latestJournal] = await Promise.all([
+          apiGet("/observer/reports/latest").catch(() => null),
+          apiGet("/observer/journal/latest").catch(() => null)
+        ]);
+        latestArtifacts.report = latestReport;
+        latestArtifacts.journal = latestJournal?.entry || null;
+
+        if (latestReportName) latestReportName.textContent = latestReport?.filename || "none yet";
+        if (latestReportMeta) latestReportMeta.textContent = latestReport?.generated_at ? `Generated ${formatDateTime(latestReport.generated_at)}` : "Generate a report from the control menu to populate this.";
+        const journalEntry = latestArtifacts.journal;
+        if (latestJournalDate) latestJournalDate.textContent = journalEntry?.date || "none yet";
+        if (latestJournalMeta) latestJournalMeta.textContent = journalEntry?.title || "Daily observer journal availability appears here.";
+        if (latestJournalSnippet) latestJournalSnippet.textContent = journalEntry?.body || "Latest report and journal metadata should be pulled from the observer so operators can jump from system state into readable outputs.";
+        if (reportHealthRing) {
+          const ringValue = latestReport?.generated_at && journalEntry ? "100%" : latestReport?.generated_at ? "72%" : journalEntry ? "48%" : "0%";
+          reportHealthRing.style.setProperty("--ring-label", `"${ringValue}"`);
+        }
+        if (latestReport || journalEntry) {
+          setPanelBadge(artifactsPanelState, "good", "live");
+          if (artifactsPanelMeta) artifactsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML(latestReport && journalEntry ? "report and journal metadata are loaded" : latestReport ? "report metadata is loaded; journal is still missing" : "journal metadata is loaded; report is still missing")}`;
+        } else {
+          setPanelBadge(artifactsPanelState, "warn", "empty");
+          if (artifactsPanelMeta) artifactsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("report and journal metadata are currently empty")}`;
+        }
+      } catch (error) {
+        if (latestReportMeta) latestReportMeta.textContent = "Artifact metadata could not be loaded from observer endpoints.";
+        if (latestJournalMeta) latestJournalMeta.textContent = "Journal metadata could not be loaded from observer endpoints.";
+        if (latestJournalSnippet) latestJournalSnippet.textContent = "Artifact reads are currently failing, so the dashboard cannot show the latest report or journal details.";
+        if (reportHealthRing) {
+          reportHealthRing.style.setProperty("--ring-label", "\"0%\"");
+        }
+        setPanelBadge(artifactsPanelState, "bad", "error");
+        if (artifactsPanelMeta) artifactsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("artifact metadata could not be read from observer endpoints")}`;
+      }
+    }
+
+    async function loadDashboardData() {
+      setObserverSurfaceState("loading");
+      try {
+        const dashboardLimit = dashboardMode === "debug" ? 24 : 12;
+        const [data, agentSummary] = await Promise.all([
+          apiGet(`/observer/dashboard?limit=${dashboardLimit}`),
+          apiGet("/observer/agents/summary").catch(() => null)
+        ]);
+        latestDashboardPayload = data;
+        renderOverviewData(data);
+        renderBenchmarkData(data);
+        renderStatsData(data);
+        renderSelfCareData(data);
+        renderArchitecturePanels(data);
+        renderServicesData(data);
+        renderAgentData(data);
+        renderAgentSummaryData(agentSummary);
+        renderTasks(buildTasksFromDashboard(data));
+        refreshArtifacts();
+        setObserverSurfaceState("success", { refreshedAt: new Date().toISOString() });
+      } catch (error) {
+        renderTasks([
+          {
+            id: "fallback-1",
+            name: "Observer dashboard fetch",
+            meta: "Live observer endpoints are unavailable, so the lane is showing bounded degraded-state items instead.",
+            percent: 58,
+            state: "running",
+            stateLabel: "Running",
+            sourceLabel: "observer",
+            contextLabel: "fallback",
+            detailTitle: "Observer dashboard fetch",
+            detailBody: "The dashboard could not read /observer/dashboard, so bounded fallback items are being shown until live data returns."
+          },
+          {
+            id: "fallback-2",
+            name: "Self-care follow-up",
+            meta: "Queued maintenance remains muted until an operator explicitly triggers it.",
+            percent: 18,
+            state: "running",
+            stateLabel: "Queued",
+            sourceLabel: "self-care",
+            contextLabel: "operator action",
+            detailTitle: "Self-care follow-up",
+            detailBody: "The observer could not confirm live cycle data, so this row reflects a queued bounded self-care follow-up state."
+          },
+          {
+            id: "fallback-3",
+            name: "Offline watch-agent-03",
+            meta: "Restart requested by self-care; still waiting for confirmation.",
+            percent: 26,
+            state: "warning",
+            stateLabel: "Needs attention",
+            sourceLabel: "agent",
+            contextLabel: "watch",
+            detailTitle: "Offline watch-agent-03",
+            detailBody: "This degraded fallback row keeps a real operator-shaped issue visible even while the dashboard cannot read fresh observer payloads."
+          }
+        ]);
+        renderOverviewData({});
+        renderBenchmarkData({});
+        renderStatsData({});
+        renderSelfCareData({});
+        renderArchitecturePanels({});
+        renderServicesData({ services: [] });
+        renderAgentData({ agents: [] });
+        renderAgentSummaryData(null);
+        setPanelBadge(tasksPanelState, "warn", "fallback");
+        if (tasksPanelMeta) tasksPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("bounded degraded-state task items are being shown until observer data returns")}`;
+        setPanelBadge(flowPanelState, "warn", "fallback");
+        if (flowPanelMeta) flowPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("flow and storage tabs are showing baseline explanatory structure during dashboard fallback")}`;
+        setPanelBadge(statsPanelState, "warn", "fallback");
+        if (statsPanelMeta) statsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("24h event summaries are unavailable during dashboard fallback")}`;
+        setPanelBadge(selfcarePanelState, "warn", "fallback");
+        if (selfcarePanelMeta) selfcarePanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("self-care cycle history is unavailable during dashboard fallback")}`;
+        setPanelBadge(servicesPanelState, "warn", "fallback");
+        if (servicesPanelMeta) servicesPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("service summaries are unavailable during dashboard fallback")}`;
+        setPanelBadge(agentsPanelState, "warn", "fallback");
+        if (agentsPanelMeta) agentsPanelMeta.innerHTML = `<span class="dot"></span> ${escapeHTML("agent summaries are unavailable during dashboard fallback")}`;
+        setObserverSurfaceState("error", { message: error.message });
+      }
+    }
+
+    function completeDemoTask() {
+      if (!currentTasks.length) return;
+      const targetIndex = currentTasks.findIndex((task) => task.state !== "done");
+      if (targetIndex === -1) return;
+      const task = { ...currentTasks[targetIndex] };
+      const start = Math.max(0, Math.min(100, Number(task.percent || 0)));
+      const end = 100;
+      const steps = 10;
+      let step = 0;
+      const timer = window.setInterval(() => {
+        step += 1;
+        const nextPercent = Math.round(start + ((end - start) * step) / steps);
+        currentTasks.splice(targetIndex, 1, {
+          ...task,
+          percent: nextPercent,
+          sideLabel: `${nextPercent}%`,
+          state: step >= steps ? "done" : "running",
+          stateLabel: step >= steps ? "Completed" : "Finishing"
+        });
+        renderTasks(currentTasks);
+        if (step >= steps) {
+          window.clearInterval(timer);
+          currentTasks.splice(targetIndex, 1, {
+            ...task,
+            state: "done",
+            stateLabel: "Completed",
+            percent: 100,
+            sideLabel: "done",
+            meta: `Finished cleanly: ${task.meta}`
+          });
+          renderTasks(currentTasks);
+          makeToast("success", "Task completed", `${task.name} finished without starting a small civil war.`);
+        }
+      }, 90);
+    }
+
+    function openDetail(title, body) {
+      if (!detailDrawer || !detailTitle || !detailBody) {
+        return;
+      }
+      detailTitle.textContent = title || "Detail";
+      detailBody.textContent = body || "";
+      detailDrawer.classList.add("open");
+    }
+
+    function scheduleAutoRefresh() {
+      if (autoRefreshTimer) {
+        window.clearInterval(autoRefreshTimer);
+      }
+      if (refreshCountdownTimer) {
+        window.clearInterval(refreshCountdownTimer);
+      }
+      const intervalMs = dashboardMode === "debug" ? 12000 : 20000;
+      nextRefreshAt = Date.now() + intervalMs;
+      updateRefreshCountdown();
+      refreshCountdownTimer = window.setInterval(updateRefreshCountdown, 1000);
+      autoRefreshTimer = window.setInterval(() => {
+        loadDashboardData();
+        nextRefreshAt = Date.now() + intervalMs;
+        updateRefreshCountdown();
+      }, intervalMs);
+    }
+
+    function processToastQueue() {
+      if (!toastStack) {
+        return;
+      }
+
+      const darkPhaseMs = 45000;
+      const glassPhaseMs = 15000;
+      const staggerMs = 8000;
+      const fadePhaseMs = 5000;
+      const toasts = Array.from(toastStack.children);
+
+      const startGlassPhase = (toast) => {
+        if (!toast.isConnected) {
+          processToastQueue();
+          return;
+        }
+
+        toast.dataset.phaseQueued = "false";
+        toast.dataset.glassStartedAt = String(Date.now());
+        toast.classList.add("glass-phase");
+
+        processToastQueue();
+
+        toast._fadeTimer = window.setTimeout(() => {
+          if (!toast.isConnected) {
+            processToastQueue();
+            return;
+          }
+          toast.classList.add("fading");
+          processToastQueue();
+        }, glassPhaseMs);
+
+        toast._removeTimer = window.setTimeout(() => {
+          if (toast.parentElement) {
+            toast.remove();
+          }
+          processToastQueue();
+        }, glassPhaseMs + fadePhaseMs);
+      };
+
+      for (let index = 0; index < toasts.length; index += 1) {
+        const toast = toasts[index];
+        if (!toast || toast.classList.contains("glass-phase") || toast.classList.contains("fading") || toast.dataset.phaseQueued === "true") {
+          continue;
+        }
+
+        const createdAt = Number(toast.dataset.createdAt || Date.now());
+        let readyAt = createdAt + darkPhaseMs;
+
+        if (index > 0) {
+          const previousToast = toasts[index - 1];
+          const previousGlassStartedAt = Number(previousToast?.dataset.glassStartedAt || 0);
+          if (!previousGlassStartedAt) {
+            return;
+          }
+          readyAt = Math.max(readyAt, previousGlassStartedAt + staggerMs);
+        }
+
+        const waitMs = Math.max(0, readyAt - Date.now());
+        toast.dataset.phaseQueued = "true";
+        toast._queueTimer = window.setTimeout(() => startGlassPhase(toast), waitMs);
+        return;
+      }
+    }
+
+    function makeToast(type, title, body) {
+      if (!toastStack) {
+        return;
+      }
+
+      const toast = document.createElement("div");
+      toast.className = `notif ${type}`;
+      toast.dataset.createdAt = String(Date.now());
+      toast.innerHTML = `
+        <div class="notif-icon">${type === "success" ? "✓" : type === "warning" ? "!" : type === "error" ? "×" : "i"}</div>
+        <div>
+          <strong>${title}</strong>
+          <div class="mini">${body}</div>
+        </div>
+      `;
+
+      toastStack.appendChild(toast);
+
+      toast.addEventListener("click", () => {
+        toast.classList.add("fading");
+        if (toast._queueTimer) {
+          window.clearTimeout(toast._queueTimer);
+        }
+        if (toast._fadeTimer) {
+          window.clearTimeout(toast._fadeTimer);
+        }
+        if (toast._removeTimer) {
+          window.clearTimeout(toast._removeTimer);
+        }
+        window.setTimeout(() => {
+          if (toast.parentElement) {
+            toast.remove();
+          }
+          processToastQueue();
+        }, 220);
+      });
+
+      toast.addEventListener("remove", () => {
+        if (toast._queueTimer) {
+          window.clearTimeout(toast._queueTimer);
+        }
+        if (toast._fadeTimer) {
+          window.clearTimeout(toast._fadeTimer);
+        }
+        if (toast._removeTimer) {
+          window.clearTimeout(toast._removeTimer);
+        }
+      });
+
+      const originalRemove = toast.remove.bind(toast);
+      toast.remove = () => {
+        if (toast._queueTimer) {
+          window.clearTimeout(toast._queueTimer);
+        }
+        if (toast._fadeTimer) {
+          window.clearTimeout(toast._fadeTimer);
+        }
+        if (toast._removeTimer) {
+          window.clearTimeout(toast._removeTimer);
+        }
+        originalRemove();
+        processToastQueue();
+      };
+
+      processToastQueue();
+    }
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.view;
+        buttons.forEach((item) => item.classList.toggle("active", item === button));
+        panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== target));
+        saveDashboardState();
+      });
+    });
+
+    railButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const targetId = button.dataset.railTarget;
+        if (!targetId) return;
+        const section = document.getElementById(targetId);
+        if (!section) return;
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+        railButtons.forEach((item) => item.classList.toggle("active", item === button));
+      });
+    });
+
+    document.addEventListener("scroll", syncRailHighlight, { passive: true });
+
+    if (commandPalette) {
+      commandPalette.addEventListener("click", (event) => {
+        if (event.target === commandPalette) {
+          closeCommandPalette();
+        }
+      });
+    }
+
+    if (commandInput) {
+      commandInput.addEventListener("input", () => {
+        renderCommandPalette(commandInput.value);
+      });
+    }
+
+    document.addEventListener("keydown", (event) => {
+      const targetTag = String(event.target?.tagName || "").toLowerCase();
+      const targetIsEditable = event.target?.isContentEditable || ["input", "textarea", "select"].includes(targetTag);
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        openCommandPalette();
+        return;
+      }
+
+      if (event.key === "Escape" && commandPalette?.classList.contains("open")) {
+        event.preventDefault();
+        closeCommandPalette();
+        return;
+      }
+
+      if (targetIsEditable) return;
+
+      if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        performDashboardRefresh();
+        return;
+      }
+
+      if (event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        toggleDashboardMode();
+      }
+    });
+
+    if (menu && menuToggle) {
+      menuToggle.addEventListener("click", () => {
+        const isOpen = menu.classList.toggle("open");
+        menuToggle.setAttribute("aria-expanded", String(isOpen));
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!menu.contains(event.target)) {
+          menu.classList.remove("open");
+          menuToggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
+    menuActions.forEach((action) => {
+      action.addEventListener("click", async () => {
+        const kind = action.dataset.menuAction;
+        if (kind === "toggle-debug") {
+          toggleDashboardMode();
+        } else if (kind === "focus-agents") {
+          currentTaskFilter = "attention";
+          taskFilters.forEach((button) => button.classList.toggle("active", button.dataset.taskFilter === currentTaskFilter));
+          currentAgentFilter = "attention";
+          agentFilters.forEach((button) => button.classList.toggle("active", button.dataset.agentFilter === currentAgentFilter));
+          renderTasks(currentTasks);
+          renderAgentData(latestDashboardPayload || { agents: [] });
+          makeToast("warning", "Agent focus", "Task lane narrowed to attention-worthy pipeline agents and related work.");
+          saveDashboardState();
+        } else if (kind === "export-report") {
+          try {
+            await generateObserverReport();
+          } catch (error) {
+            makeToast("error", "Report export failed", error.message);
+          }
+        }
+        menu.classList.remove("open");
+        menuToggle.setAttribute("aria-expanded", "false");
+      });
+    });
+
+    bindDetailTriggers();
+
+    if (detailClose && detailDrawer) {
+      detailClose.addEventListener("click", () => {
+        detailDrawer.classList.remove("open");
+      });
+    }
+
+    if (statusCoreLight) {
+      statusCoreLight.addEventListener("click", () => openStatusLightDetail("core"));
+    }
+    if (statusObserverLight) {
+      statusObserverLight.addEventListener("click", () => openStatusLightDetail("observer"));
+    }
+    if (statusAttentionLight) {
+      statusAttentionLight.addEventListener("click", () => openStatusLightDetail("attention"));
+    }
+
+    if (browserRefreshBtn) {
+      browserRefreshBtn.addEventListener("click", () => performDashboardRefresh());
+    }
+    if (browserSelfCareBtn) {
+      browserSelfCareBtn.addEventListener("click", async () => {
+        try {
+          await requestSelfCareRun("top bar");
+        } catch (error) {
+          makeToast("error", "Self-care request failed", error.message || "Bounded self-care could not be started.");
+        }
+      });
+    }
+    if (browserReportBtn) {
+      browserReportBtn.addEventListener("click", async () => {
+        try {
+          await generateObserverReport();
+        } catch (error) {
+          makeToast("error", "Report export failed", error.message || "Observer report could not be generated.");
+        }
+      });
+    }
+    if (browserCommandBtn) {
+      browserCommandBtn.addEventListener("click", () => openCommandPalette());
+    }
+    if (observerRoutePill) {
+      observerRoutePill.addEventListener("click", () => {
+        const data = latestDashboardPayload || {};
+        const services = Array.isArray(data?.services) ? data.services.length : 0;
+        const agents = Array.isArray(data?.agents) ? data.agents.length : 0;
+        const events = Array.isArray(data?.events) ? data.events.length : 0;
+        openDetail(
+          "Observer route",
+          `Route: /observer/dashboard\nMode: ${dashboardMode}\nTracked services: ${services}\nTracked agents: ${agents}\nRecent events in payload: ${events}\nSummary: This dashboard route hydrates the operator surface with observer overview, services, agents, self-care, events, and 24-hour stats.`
+        );
+      });
+    }
+
+    if (toastButtons.info) {
+      toastButtons.info.addEventListener("click", () => {
+        makeToast("info", "Info", "Observer captured a baseline-aligned health snapshot for the intake plane.");
+      });
+    }
+
+    if (toastButtons.success) {
+      toastButtons.success.addEventListener("click", () => {
+        makeToast("success", "Success", "Self-care log trim completed without consuming the last maintenance slot.");
+      });
+    }
+
+    if (toastButtons.warning) {
+      toastButtons.warning.addEventListener("click", () => {
+        makeToast("warning", "Warning", "triage-agent-02 remains online, but latency drift has crossed the observer warning threshold.");
+      });
+    }
+
+    if (toastButtons.error) {
+      toastButtons.error.addEventListener("click", () => {
+        makeToast("error", "Error", "watch-agent-03 is offline and a restart has been requested but not yet confirmed.");
+      });
+    }
+
+    if (taskRefreshBtn) {
+      taskRefreshBtn.addEventListener("click", () => {
+        performDashboardRefresh();
+      });
+    }
+
+    if (taskCompleteDemoBtn) {
+      taskCompleteDemoBtn.addEventListener("click", completeDemoTask);
+    }
+
+    if (runSelfCareBtn) {
+      runSelfCareBtn.addEventListener("click", async () => {
+        try {
+          await requestSelfCareRun("operator panel");
+        } catch (error) {
+          makeToast("error", "Self-care request failed", error.message);
+        }
+      });
+    }
+
+    if (resetBaselineBtn) {
+      resetBaselineBtn.addEventListener("click", async () => {
+        try {
+          const result = await apiPost("/observer/actions/reset-baseline");
+          makeToast("success", "Baseline reset", `New baseline score: ${result?.new_baseline?.score ?? "updated"}.`);
+          window.setTimeout(loadDashboardData, 600);
+        } catch (error) {
+          makeToast("error", "Baseline reset failed", error.message);
+        }
+      });
+    }
+
+    if (clearEventsBtn) {
+      clearEventsBtn.addEventListener("click", async () => {
+        try {
+          const result = await apiPost("/observer/actions/clear-events", { retention_days: 30 });
+          makeToast("success", "Old events cleared", `${result?.deleted_count ?? 0} observer events older than ${result?.retention_days ?? 30} days were removed.`);
+          window.setTimeout(loadDashboardData, 700);
+        } catch (error) {
+          makeToast("error", "Clear events failed", error.message);
+        }
+      });
+    }
+
+    if (openLatestReportBtn) {
+      openLatestReportBtn.addEventListener("click", () => {
+        const report = latestArtifacts.report;
+        if (!report?.download_path) {
+          makeToast("warning", "No report yet", "Generate a report first so there is something to open.");
+          return;
+        }
+        window.open(report.download_path, "_blank", "noopener,noreferrer");
+      });
+    }
+
+    if (readLatestJournalBtn) {
+      readLatestJournalBtn.addEventListener("click", () => {
+        const journal = latestArtifacts.journal;
+        if (!journal) {
+          makeToast("warning", "No journal yet", "Generate or wait for a journal entry before opening it.");
+          return;
+        }
+        openDetail(journal.title || "Observer journal", journal.body || "No journal body recorded.");
+      });
+    }
+
+    if (refreshArtifactsBtn) {
+      refreshArtifactsBtn.addEventListener("click", async () => {
+        await refreshArtifacts();
+        makeToast("info", "Artifacts refreshed", "Latest report and journal metadata reloaded from observer storage.");
+      });
+    }
+
+    if (generateJournalBtn) {
+      generateJournalBtn.addEventListener("click", async () => {
+        try {
+          await generateObserverJournal();
+        } catch (error) {
+          makeToast("error", "Journal generation failed", error.message);
+        }
+      });
+    }
+
+    taskFilters.forEach((button) => {
+      button.addEventListener("click", () => {
+        currentTaskFilter = button.dataset.taskFilter || "all";
+        taskFilters.forEach((item) => item.classList.toggle("active", item === button));
+        renderTasks(currentTasks);
+        saveDashboardState();
+      });
+    });
+
+    serviceFilters.forEach((button) => {
+      button.addEventListener("click", () => {
+        currentServiceFilter = button.dataset.serviceFilter || "all";
+        serviceFilters.forEach((item) => item.classList.toggle("active", item === button));
+        renderServicesData(latestDashboardPayload || { services: [] });
+        saveDashboardState();
+      });
+    });
+
+    agentFilters.forEach((button) => {
+      button.addEventListener("click", () => {
+        currentAgentFilter = button.dataset.agentFilter || "all";
+        agentFilters.forEach((item) => item.classList.toggle("active", item === button));
+        renderAgentData(latestDashboardPayload || { agents: [] });
+        saveDashboardState();
+      });
+    });
+
+    if (serviceSearchInput) {
+      serviceSearchInput.addEventListener("input", () => {
+        currentServiceSearch = serviceSearchInput.value.trim();
+        renderServicesData(latestDashboardPayload || { services: [] });
+        saveDashboardState();
+      });
+    }
+
+    if (agentSearchInput) {
+      agentSearchInput.addEventListener("input", () => {
+        currentAgentSearch = agentSearchInput.value.trim();
+        renderAgentData(latestDashboardPayload || { agents: [] });
+        saveDashboardState();
+      });
+    }
+
+    if (agentPipelineSelect) {
+      agentPipelineSelect.addEventListener("change", () => {
+        currentAgentPipeline = agentPipelineSelect.value || "all";
+        renderAgentData(latestDashboardPayload || { agents: [] });
+        saveDashboardState();
+      });
+    }
+
+    renderCommandPalette("");
+    loadDashboardState();
+    loadDashboardData();
+    scheduleAutoRefresh();
+    syncRailHighlight();
+    makeToast("info", "Info", "Observer dashboard initialized with default mode summaries.");
+    makeToast("warning", "Warning", "One pipeline agent is offline and currently awaiting restart confirmation.");
+  </script>
+</body>
+</html>

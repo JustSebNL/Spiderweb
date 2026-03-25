@@ -1,4 +1,4 @@
-package onboard
+package wakeup
 
 import (
 	"testing"
@@ -7,15 +7,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewOnboardCommand(t *testing.T) {
-	cmd := NewOnboardCommand()
+func TestNewWakeupCommand(t *testing.T) {
+	cmd := NewWakeupCommand()
 
 	require.NotNil(t, cmd)
 
-	assert.Equal(t, "onboard", cmd.Use)
-	assert.Equal(t, "Initialize spiderweb configuration and workspace", cmd.Short)
+	assert.Equal(t, "wakeup", cmd.Use)
+	assert.Equal(t, "Initialize Spiderweb configuration and workspace", cmd.Short)
 
-	assert.Len(t, cmd.Aliases, 1)
+	assert.Len(t, cmd.Aliases, 2)
+	assert.True(t, cmd.HasAlias("wake"))
 	assert.True(t, cmd.HasAlias("o"))
 
 	assert.NotNil(t, cmd.Run)

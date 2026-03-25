@@ -19,19 +19,18 @@ SPIDERWEB_DIR="${SPIDERWEB_DIR:-$HOME/spiderweb}"
 INSTALL_PREFIX="${INSTALL_PREFIX:-$HOME/.local}"
 TRIGGER_DIR="${TRIGGER_DIR:-$SPIDERWEB_DIR/trigger}"
 BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$SPIDERWEB_DIR/brain}}"
-YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 YOUTU_MODEL_REPO="${YOUTU_MODEL_REPO:-tencent/Youtu-LLM-2B}"
 YOUTU_GGUF_REPO="${YOUTU_GGUF_REPO:-tencent/Youtu-LLM-2B-GGUF}"
 YOUTU_GGUF_FILE="${YOUTU_GGUF_FILE:-Youtu-LLM-2B-Q8_0.gguf}"
-YOUTU_CACHE_DIR="${YOUTU_CACHE_DIR:-$YOUTU_DIR/model-cache}"
-YOUTU_VLLM_VENV="${YOUTU_VLLM_VENV:-$YOUTU_DIR/.venv-vllm}"
-YOUTU_VLLM_PORT="${YOUTU_VLLM_PORT:-8000}"
-YOUTU_VLLM_HOST="${YOUTU_VLLM_HOST:-127.0.0.1}"
-YOUTU_VLLM_PID_FILE="${YOUTU_VLLM_PID_FILE:-$YOUTU_DIR/youtu-vllm.pid}"
-YOUTU_VLLM_LOG_FILE="${YOUTU_VLLM_LOG_FILE:-$YOUTU_DIR/youtu-vllm.log}"
-YOUTU_VLLM_MAX_MODEL_LEN="${YOUTU_VLLM_MAX_MODEL_LEN:-32768}"
-YOUTU_VLLM_GPU_MEMORY_UTILIZATION="${YOUTU_VLLM_GPU_MEMORY_UTILIZATION:-0.85}"
-YOUTU_LLAMA_CPP_PORT="${YOUTU_LLAMA_CPP_PORT:-8081}"
+BRAIN_MODEL_CACHE_DIR="${BRAIN_MODEL_CACHE_DIR:-${YOUTU_CACHE_DIR:-$BRAIN_DIR/model-cache}}"
+BRAIN_VLLM_VENV="${BRAIN_VLLM_VENV:-${YOUTU_VLLM_VENV:-$BRAIN_DIR/.venv-vllm}}"
+BRAIN_VLLM_PORT="${BRAIN_VLLM_PORT:-${YOUTU_VLLM_PORT:-8000}}"
+BRAIN_VLLM_HOST="${BRAIN_VLLM_HOST:-${YOUTU_VLLM_HOST:-127.0.0.1}}"
+BRAIN_VLLM_PID_FILE="${BRAIN_VLLM_PID_FILE:-${YOUTU_VLLM_PID_FILE:-$BRAIN_DIR/brain-vllm.pid}}"
+BRAIN_VLLM_LOG_FILE="${BRAIN_VLLM_LOG_FILE:-${YOUTU_VLLM_LOG_FILE:-$BRAIN_DIR/brain-vllm.log}}"
+BRAIN_VLLM_MAX_MODEL_LEN="${BRAIN_VLLM_MAX_MODEL_LEN:-${YOUTU_VLLM_MAX_MODEL_LEN:-32768}}"
+BRAIN_VLLM_GPU_MEMORY_UTILIZATION="${BRAIN_VLLM_GPU_MEMORY_UTILIZATION:-${YOUTU_VLLM_GPU_MEMORY_UTILIZATION:-0.85}}"
+BRAIN_LLAMA_CPP_PORT="${BRAIN_LLAMA_CPP_PORT:-${YOUTU_LLAMA_CPP_PORT:-8081}}"
 AUTO_START_MODEL_SERVICE="${AUTO_START_MODEL_SERVICE:-1}"
 ENABLE_TRIGGER_WORKSPACE="${ENABLE_TRIGGER_WORKSPACE:-0}"
 AUTO_INSTALL_TRIGGER_DEPS="${AUTO_INSTALL_TRIGGER_DEPS:-0}"
@@ -46,6 +45,8 @@ SELECTED_RUNTIME=""
 SELECTED_MODEL=""
 SELECTED_BASE_URL=""
 SPIDERWEB_HOME_DIR="${SPIDERWEB_HOME_DIR:-$HOME/.spiderweb}"
+HF_HOME_DIR="${HF_HOME_DIR:-$SPIDERWEB_HOME_DIR/hf}"
+HF_HUB_CACHE_DIR="${HF_HUB_CACHE_DIR:-$HF_HOME_DIR/hub}"
 GENERATED_ENV_FILE="${SPIDERWEB_DIR}/.generated/spiderweb-runtime.env"
 RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-$SPIDERWEB_HOME_DIR/runtime.env}"
 SETUP_NOTES_FILE="${SETUP_NOTES_FILE:-$SPIDERWEB_HOME_DIR/setup-notes.txt}"
@@ -58,13 +59,29 @@ err() { printf "[ERROR] %s\n" "$*" >&2; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 is_interactive() { [ -t 0 ] && [ -t 1 ]; }
 
+brain_vllm_patches_ready() {
+  local patches_dir="$SCRIPT_DIR/infra/vllm/patches"
+  local required=(
+    "youtu_llm.py"
+    "configuration_youtu.py"
+    "registry.py"
+    "__init__.py"
+  )
+  local file=""
+  for file in "${required[@]}"; do
+    if [ ! -f "$patches_dir/$file" ]; then
+      return 1
+    fi
+  done
+  return 0
+}
+
 if [ -f "$BOOTSTRAP_STATE_FILE" ]; then
   # shellcheck source=/dev/null
   . "$BOOTSTRAP_STATE_FILE"
 fi
 
 BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$SPIDERWEB_DIR/brain}}"
-YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
 
 usage() {
   cat <<'EOF'
@@ -182,22 +199,23 @@ save_bootstrap_state() {
   {
     printf 'SPIDERWEB_DIR=%q\n' "$SPIDERWEB_DIR"
     printf 'SPIDERWEB_HOME_DIR=%q\n' "$SPIDERWEB_HOME_DIR"
+    printf 'HF_HOME_DIR=%q\n' "$HF_HOME_DIR"
+    printf 'HF_HUB_CACHE_DIR=%q\n' "$HF_HUB_CACHE_DIR"
     printf 'INSTALL_PREFIX=%q\n' "$INSTALL_PREFIX"
     printf 'TRIGGER_DIR=%q\n' "$TRIGGER_DIR"
     printf 'BRAIN_DIR=%q\n' "$BRAIN_DIR"
-    printf 'YOUTU_DIR=%q\n' "$YOUTU_DIR"
     printf 'YOUTU_MODEL_REPO=%q\n' "$YOUTU_MODEL_REPO"
     printf 'YOUTU_GGUF_REPO=%q\n' "$YOUTU_GGUF_REPO"
     printf 'YOUTU_GGUF_FILE=%q\n' "$YOUTU_GGUF_FILE"
-    printf 'YOUTU_CACHE_DIR=%q\n' "$YOUTU_CACHE_DIR"
-    printf 'YOUTU_VLLM_VENV=%q\n' "$YOUTU_VLLM_VENV"
-    printf 'YOUTU_VLLM_PORT=%q\n' "$YOUTU_VLLM_PORT"
-    printf 'YOUTU_VLLM_HOST=%q\n' "$YOUTU_VLLM_HOST"
-    printf 'YOUTU_VLLM_PID_FILE=%q\n' "$YOUTU_VLLM_PID_FILE"
-    printf 'YOUTU_VLLM_LOG_FILE=%q\n' "$YOUTU_VLLM_LOG_FILE"
-    printf 'YOUTU_VLLM_MAX_MODEL_LEN=%q\n' "$YOUTU_VLLM_MAX_MODEL_LEN"
-    printf 'YOUTU_VLLM_GPU_MEMORY_UTILIZATION=%q\n' "$YOUTU_VLLM_GPU_MEMORY_UTILIZATION"
-    printf 'YOUTU_LLAMA_CPP_PORT=%q\n' "$YOUTU_LLAMA_CPP_PORT"
+    printf 'BRAIN_MODEL_CACHE_DIR=%q\n' "$BRAIN_MODEL_CACHE_DIR"
+    printf 'BRAIN_VLLM_VENV=%q\n' "$BRAIN_VLLM_VENV"
+    printf 'BRAIN_VLLM_PORT=%q\n' "$BRAIN_VLLM_PORT"
+    printf 'BRAIN_VLLM_HOST=%q\n' "$BRAIN_VLLM_HOST"
+    printf 'BRAIN_VLLM_PID_FILE=%q\n' "$BRAIN_VLLM_PID_FILE"
+    printf 'BRAIN_VLLM_LOG_FILE=%q\n' "$BRAIN_VLLM_LOG_FILE"
+    printf 'BRAIN_VLLM_MAX_MODEL_LEN=%q\n' "$BRAIN_VLLM_MAX_MODEL_LEN"
+    printf 'BRAIN_VLLM_GPU_MEMORY_UTILIZATION=%q\n' "$BRAIN_VLLM_GPU_MEMORY_UTILIZATION"
+    printf 'BRAIN_LLAMA_CPP_PORT=%q\n' "$BRAIN_LLAMA_CPP_PORT"
     printf 'AUTO_START_MODEL_SERVICE=%q\n' "$AUTO_START_MODEL_SERVICE"
     printf 'ENABLE_TRIGGER_WORKSPACE=%q\n' "$ENABLE_TRIGGER_WORKSPACE"
     printf 'AUTO_INSTALL_TRIGGER_DEPS=%q\n' "$AUTO_INSTALL_TRIGGER_DEPS"
@@ -391,13 +409,13 @@ chapter_install_spiderweb_core() {
 
 chapter_prepare_directories() {
   log "Chapter 4/8: prepare local directories"
-  run_cmd "mkdir -p '$YOUTU_DIR' '$YOUTU_CACHE_DIR' '$SPIDERWEB_HOME_DIR' '$(dirname "$GENERATED_ENV_FILE")' '$(dirname "$RUNTIME_ENV_FILE")' '$(dirname "$SETUP_NOTES_FILE")'"
+  run_cmd "mkdir -p '$BRAIN_DIR' '$BRAIN_MODEL_CACHE_DIR' '$SPIDERWEB_HOME_DIR' '$HF_HOME_DIR' '$HF_HUB_CACHE_DIR' '$(dirname "$GENERATED_ENV_FILE")' '$(dirname "$RUNTIME_ENV_FILE")' '$(dirname "$SETUP_NOTES_FILE")'"
 }
 
 chapter_prepare_trigger() {
   log "Chapter 5/8: prepare optional Trigger workspace"
   if have_cmd python3; then
-    run_cmd "python3 -m pip install --upgrade pip huggingface_hub"
+    run_cmd "HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' python3 -m pip install --upgrade pip huggingface_hub"
   fi
   if [ "$ENABLE_TRIGGER_WORKSPACE" != "1" ]; then
     log "Skipping Trigger workspace setup because ENABLE_TRIGGER_WORKSPACE=$ENABLE_TRIGGER_WORKSPACE"
@@ -432,12 +450,22 @@ select_runtime() {
       ;;
   esac
 
+  if [ "$SELECTED_RUNTIME" = "vllm" ] && ! brain_vllm_patches_ready; then
+    if [ "$CHEAP_COGNITION_RUNTIME" = "vllm" ]; then
+      err "Native vLLM requires the Youtu integration files under $SCRIPT_DIR/infra/vllm/patches/"
+      err "Missing one or more of: youtu_llm.py, configuration_youtu.py, registry.py, __init__.py"
+      exit 1
+    fi
+    warn "Native vLLM patches are missing; falling back to llama.cpp"
+    SELECTED_RUNTIME="llama_cpp"
+  fi
+
   if [ "$SELECTED_RUNTIME" = "vllm" ]; then
     SELECTED_MODEL="$YOUTU_MODEL_REPO"
-    SELECTED_BASE_URL="http://127.0.0.1:${YOUTU_VLLM_PORT}/v1"
+    SELECTED_BASE_URL="http://127.0.0.1:${BRAIN_VLLM_PORT}/v1"
   else
     SELECTED_MODEL="$YOUTU_GGUF_REPO:$YOUTU_GGUF_FILE"
-    SELECTED_BASE_URL="http://127.0.0.1:${YOUTU_LLAMA_CPP_PORT}/v1"
+    SELECTED_BASE_URL="http://127.0.0.1:${BRAIN_LLAMA_CPP_PORT}/v1"
   fi
 }
 
@@ -449,7 +477,7 @@ chapter_select_runtime() {
 }
 
 download_vllm_model() {
-  local cmd="python3 -m huggingface_hub download '$YOUTU_MODEL_REPO' --local-dir '$YOUTU_DIR'"
+  local cmd="HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' python3 -m huggingface_hub download '$YOUTU_MODEL_REPO' --local-dir '$BRAIN_DIR'"
   if [ -n "$HF_TOKEN" ]; then
     cmd="$cmd --token '$HF_TOKEN'"
   fi
@@ -457,7 +485,7 @@ download_vllm_model() {
 }
 
 download_gguf_model() {
-  local cmd="python3 -m huggingface_hub download '$YOUTU_GGUF_REPO' '$YOUTU_GGUF_FILE' --local-dir '$YOUTU_DIR'"
+  local cmd="HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' python3 -m huggingface_hub download '$YOUTU_GGUF_REPO' '$YOUTU_GGUF_FILE' --local-dir '$BRAIN_DIR'"
   if [ -n "$HF_TOKEN" ]; then
     cmd="$cmd --token '$HF_TOKEN'"
   fi
@@ -465,9 +493,9 @@ download_gguf_model() {
 }
 
 install_vllm_runtime() {
-  run_cmd "python3 -m venv '$YOUTU_VLLM_VENV'"
-  run_cmd "'$YOUTU_VLLM_VENV/bin/python' -m pip install --upgrade pip setuptools wheel"
-  run_cmd "'$YOUTU_VLLM_VENV/bin/python' -m pip install 'vllm==0.10.2' 'huggingface_hub'"
+  run_cmd "python3 -m venv '$BRAIN_VLLM_VENV'"
+  run_cmd "'$BRAIN_VLLM_VENV/bin/python' -m pip install --upgrade pip setuptools wheel"
+  run_cmd "HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' '$BRAIN_VLLM_VENV/bin/python' -m pip install 'vllm==0.10.2' 'huggingface_hub'"
 }
 
 start_vllm_server() {
@@ -475,7 +503,7 @@ start_vllm_server() {
     log "Skipping model service startup because AUTO_START_MODEL_SERVICE=$AUTO_START_MODEL_SERVICE"
     return 0
   fi
-  run_cmd "cd '$SCRIPT_DIR' && YOUTU_DIR='$YOUTU_DIR' YOUTU_CACHE_DIR='$YOUTU_CACHE_DIR' YOUTU_VLLM_VENV='$YOUTU_VLLM_VENV' YOUTU_VLLM_PORT='$YOUTU_VLLM_PORT' YOUTU_VLLM_HOST='$YOUTU_VLLM_HOST' YOUTU_VLLM_PID_FILE='$YOUTU_VLLM_PID_FILE' YOUTU_VLLM_LOG_FILE='$YOUTU_VLLM_LOG_FILE' YOUTU_VLLM_MODEL_PATH='$YOUTU_DIR' YOUTU_VLLM_MAX_MODEL_LEN='$YOUTU_VLLM_MAX_MODEL_LEN' YOUTU_VLLM_GPU_MEMORY_UTILIZATION='$YOUTU_VLLM_GPU_MEMORY_UTILIZATION' ./scripts/start_youtu_vllm.sh"
+  run_cmd "cd '$SCRIPT_DIR' && HF_HOME='$HF_HOME_DIR' HF_HUB_CACHE='$HF_HUB_CACHE_DIR' BRAIN_DIR='$BRAIN_DIR' BRAIN_MODEL_CACHE_DIR='$BRAIN_MODEL_CACHE_DIR' BRAIN_VLLM_VENV='$BRAIN_VLLM_VENV' BRAIN_VLLM_PORT='$BRAIN_VLLM_PORT' BRAIN_VLLM_HOST='$BRAIN_VLLM_HOST' BRAIN_VLLM_PID_FILE='$BRAIN_VLLM_PID_FILE' BRAIN_VLLM_LOG_FILE='$BRAIN_VLLM_LOG_FILE' BRAIN_VLLM_MODEL_PATH='$BRAIN_DIR' BRAIN_VLLM_MAX_MODEL_LEN='$BRAIN_VLLM_MAX_MODEL_LEN' BRAIN_VLLM_GPU_MEMORY_UTILIZATION='$BRAIN_VLLM_GPU_MEMORY_UTILIZATION' ./scripts/start_brain_vllm.sh"
 }
 
 install_llama_cpp() {
@@ -502,15 +530,15 @@ start_llama_cpp_server() {
     return 0
   fi
 
-  local gguf_path="$YOUTU_DIR/$YOUTU_GGUF_FILE"
-  local pid_file="$YOUTU_DIR/llama-server.pid"
+  local gguf_path="$BRAIN_DIR/$YOUTU_GGUF_FILE"
+  local pid_file="$BRAIN_DIR/llama-server.pid"
   if [ ! -f "$gguf_path" ]; then
     warn "GGUF file not found at $gguf_path; llama.cpp server cannot start yet"
     return 0
   fi
 
   run_cmd "if [ -f '$pid_file' ] && kill -0 \"\$(cat '$pid_file')\" 2>/dev/null; then exit 0; fi"
-  run_cmd "nohup '$INSTALL_PREFIX/bin/llama-server' -m '$gguf_path' --host 0.0.0.0 --port '$YOUTU_LLAMA_CPP_PORT' --log-disable > '$YOUTU_DIR/llama-server.log' 2>&1 & echo \$! > '$pid_file'"
+  run_cmd "nohup '$INSTALL_PREFIX/bin/llama-server' -m '$gguf_path' --host 0.0.0.0 --port '$BRAIN_LLAMA_CPP_PORT' --log-disable > '$BRAIN_DIR/llama-server.log' 2>&1 & echo \$! > '$pid_file'"
 }
 
 chapter_prepare_model_runtime() {
@@ -537,6 +565,8 @@ SPIDERWEB_INTAKE_CHEAP_COGNITION_BASE_URL=$SELECTED_BASE_URL
 SPIDERWEB_INTAKE_CHEAP_COGNITION_MODEL=$model_value
 SPIDERWEB_INTAKE_CHEAP_COGNITION_API_KEY=
 SPIDERWEB_INTAKE_CHEAP_COGNITION_TIMEOUT_SECONDS=30
+HF_HOME=$HF_HOME_DIR
+HF_HUB_CACHE=$HF_HUB_CACHE_DIR
 EOF"
 }
 
@@ -559,6 +589,8 @@ Autonomous runtime decision:
 - base URL: ${SELECTED_BASE_URL}
 - generated env: ${GENERATED_ENV_FILE}
 - runtime env: ${RUNTIME_ENV_FILE}
+- HF cache home: ${HF_HOME_DIR}
+- HF hub cache: ${HF_HUB_CACHE_DIR}
 - setup notes: ${SETUP_NOTES_FILE}
 - bootstrap state: ${BOOTSTRAP_STATE_FILE}
 

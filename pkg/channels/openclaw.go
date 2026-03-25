@@ -24,15 +24,10 @@ const (
 
 type OpenClawChannel struct {
 	*BaseChannel
-	config     config.OpenClawConfig
-	upgrader   websocket.Upgrader
-	conn       *websocket.Conn
-	connMu     sync.RWMutex
-	sendCh     chan []byte
-	ready      bool
-	readyMu    sync.RWMutex
-	peerID     string
-	handshaked bool
+	config   config.OpenClawConfig
+	upgrader websocket.Upgrader
+	peers    map[*websocket.Conn]*openclawPeer
+	peersMu  sync.RWMutex
 }
 
 type openclawEnvelope struct {
@@ -41,6 +36,15 @@ type openclawEnvelope struct {
 	Content string            `json:"content,omitempty"`
 	Secret  string            `json:"secret,omitempty"`
 	Meta    map[string]string `json:"meta,omitempty"`
+}
+
+type openclawPeer struct {
+	conn       *websocket.Conn
+	remoteAddr string
+	peerID     string
+	sendCh     chan []byte
+	ready      bool
+	handshaked bool
 }
 
 func NewOpenClawChannel(cfg config.OpenClawConfig, msgBus *bus.MessageBus) (*OpenClawChannel, error) {
@@ -53,7 +57,7 @@ func NewOpenClawChannel(cfg config.OpenClawConfig, msgBus *bus.MessageBus) (*Ope
 			WriteBufferSize: 4096,
 			CheckOrigin:     func(r *http.Request) bool { return true },
 		},
-		sendCh: make(chan []byte, 64),
+		peers: make(map[*websocket.Conn]*openclawPeer),
 	}
 	return ch, nil
 }
@@ -66,21 +70,18 @@ func (c *OpenClawChannel) Start(ctx context.Context) error {
 
 func (c *OpenClawChannel) Stop(ctx context.Context) error {
 	c.setRunning(false)
-	c.connMu.Lock()
-	if c.conn != nil {
-		_ = c.conn.WriteControl(
+	c.peersMu.Lock()
+	for conn, peer := range c.peers {
+		_ = conn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseGoingAway, "shutting down"),
 			time.Now().Add(openclawWriteTimeout),
 		)
-		_ = c.conn.Close()
-		c.conn = nil
+		close(peer.sendCh)
+		_ = conn.Close()
+		delete(c.peers, conn)
 	}
-	c.connMu.Unlock()
-
-	c.readyMu.Lock()
-	c.ready = false
-	c.readyMu.Unlock()
+	c.peersMu.Unlock()
 
 	logger.InfoC("openclaw", "OpenClaw bridge channel stopped")
 	return nil
@@ -98,41 +99,57 @@ func (c *OpenClawChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 		return fmt.Errorf("openclaw send marshal: %w", err)
 	}
 
-	c.connMu.RLock()
-	conn := c.conn
-	c.connMu.RUnlock()
-
-	if conn == nil {
-		return fmt.Errorf("openclaw: no connected peer")
+	readyPeers := c.readyPeers()
+	if len(readyPeers) == 0 {
+		return fmt.Errorf("openclaw: no ready peer")
 	}
 
-	select {
-	case c.sendCh <- data:
-		return nil
-	default:
-		return fmt.Errorf("openclaw: send buffer full, dropping message")
+	sent := 0
+	for _, peer := range readyPeers {
+		select {
+		case peer.sendCh <- data:
+			sent++
+		default:
+			logger.WarnCF("openclaw", "Peer send buffer full, dropping outbound message", map[string]any{
+				"peer": peer.peerID,
+			})
+		}
 	}
+	if sent == 0 {
+		return fmt.Errorf("openclaw: all peer send buffers full, dropping message")
+	}
+	return nil
 }
 
 // IsConnected returns true if a WebSocket peer is connected.
 func (c *OpenClawChannel) IsConnected() bool {
-	c.connMu.RLock()
-	defer c.connMu.RUnlock()
-	return c.conn != nil
+	c.peersMu.RLock()
+	defer c.peersMu.RUnlock()
+	return len(c.peers) > 0
 }
 
 // PeerID returns the identifier of the connected peer, if any.
 func (c *OpenClawChannel) PeerID() string {
-	c.connMu.RLock()
-	defer c.connMu.RUnlock()
-	return c.peerID
+	c.peersMu.RLock()
+	defer c.peersMu.RUnlock()
+	for _, peer := range c.peers {
+		if peer.peerID != "" {
+			return peer.peerID
+		}
+	}
+	return ""
 }
 
 // IsReady returns true if the handshake has been completed.
 func (c *OpenClawChannel) IsReady() bool {
-	c.readyMu.RLock()
-	defer c.readyMu.RUnlock()
-	return c.ready
+	c.peersMu.RLock()
+	defer c.peersMu.RUnlock()
+	for _, peer := range c.peers {
+		if peer.ready {
+			return true
+		}
+	}
+	return false
 }
 
 // ServeHTTP handles the WebSocket upgrade for the OpenClaw bridge.
@@ -143,14 +160,7 @@ func (c *OpenClawChannel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c.connMu.Lock()
-	if c.conn != nil {
-		logger.WarnC("openclaw", "Replacing existing OpenClaw connection")
-		_ = c.conn.Close()
-	}
-	c.conn = conn
-	c.peerID = r.RemoteAddr
-	c.connMu.Unlock()
+	peer := c.registerPeer(conn, r.RemoteAddr)
 
 	logger.InfoCF("openclaw", "OpenClaw peer connected", map[string]any{
 		"remote": r.RemoteAddr,
@@ -164,32 +174,22 @@ func (c *OpenClawChannel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Start writer goroutine
-	go c.writePump(conn)
+	go c.writePump(peer)
 
 	// Read loop (blocks until connection closes)
-	c.readPump(conn)
+	c.readPump(peer)
 
 	// Cleanup
-	c.connMu.Lock()
-	if c.conn == conn {
-		c.conn = nil
-		c.peerID = ""
-	}
-	c.connMu.Unlock()
-
-	c.readyMu.Lock()
-	c.ready = false
-	c.handshaked = false
-	c.readyMu.Unlock()
+	c.unregisterPeer(conn)
 
 	logger.InfoC("openclaw", "OpenClaw peer disconnected")
 }
 
-func (c *OpenClawChannel) readPump(conn *websocket.Conn) {
-	defer conn.Close()
+func (c *OpenClawChannel) readPump(peer *openclawPeer) {
+	defer peer.conn.Close()
 
 	for {
-		_, message, err := conn.ReadMessage()
+		_, message, err := peer.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 				logger.ErrorCF("openclaw", "WebSocket read error", map[string]any{"error": err.Error()})
@@ -205,18 +205,18 @@ func (c *OpenClawChannel) readPump(conn *websocket.Conn) {
 
 		switch env.Type {
 		case "handshake":
-			c.handleHandshake(conn, env)
+			c.handleHandshake(peer, env)
 		case "message":
-			c.handleIncomingMessage(env)
+			c.handleIncomingMessage(peer, env)
 		case "ping":
-			c.sendPong()
+			c.sendPong(peer)
 		default:
 			logger.DebugCF("openclaw", "Unknown envelope type", map[string]any{"type": env.Type})
 		}
 	}
 }
 
-func (c *OpenClawChannel) handleHandshake(conn *websocket.Conn, env openclawEnvelope) {
+func (c *OpenClawChannel) handleHandshake(peer *openclawPeer, env openclawEnvelope) {
 	if c.config.SharedSecret != "" && env.Secret != c.config.SharedSecret {
 		logger.WarnC("openclaw", "Handshake rejected: invalid shared secret")
 		nack, _ := json.Marshal(openclawEnvelope{
@@ -224,10 +224,7 @@ func (c *OpenClawChannel) handleHandshake(conn *websocket.Conn, env openclawEnve
 			Sender: "spiderweb",
 			Meta:   map[string]string{"error": "invalid secret"},
 		})
-		select {
-		case c.sendCh <- nack:
-		default:
-		}
+		c.queueToPeer(peer, nack)
 		return
 	}
 
@@ -236,10 +233,11 @@ func (c *OpenClawChannel) handleHandshake(conn *websocket.Conn, env openclawEnve
 		peerName = "openclaw"
 	}
 
-	c.readyMu.Lock()
-	c.ready = true
-	c.handshaked = true
-	c.readyMu.Unlock()
+	c.peersMu.Lock()
+	peer.ready = true
+	peer.handshaked = true
+	peer.peerID = peerName
+	c.peersMu.Unlock()
 
 	logger.InfoCF("openclaw", "Handshake accepted", map[string]any{"peer": peerName})
 
@@ -253,19 +251,17 @@ func (c *OpenClawChannel) handleHandshake(conn *websocket.Conn, env openclawEnve
 			"role":          "intake-colleague",
 		},
 	})
-	select {
-	case c.sendCh <- ack:
-	default:
+	if !c.queueToPeer(peer, ack) {
 		logger.WarnC("openclaw", "Could not queue handshake ack (buffer full)")
 	}
 
 	// If auto-handshake is enabled, send the transfer introduction
 	if c.config.AutoHandshake {
-		c.sendTransferIntroduction(peerName)
+		c.sendTransferIntroduction(peer, peerName)
 	}
 }
 
-func (c *OpenClawChannel) sendTransferIntroduction(peerName string) {
+func (c *OpenClawChannel) sendTransferIntroduction(peer *openclawPeer, peerName string) {
 	intro := openclawEnvelope{
 		Type:   "message",
 		Sender: "spiderweb",
@@ -284,27 +280,25 @@ Think of me as the receptionist who screens calls so the CEO only gets the ones 
 The transfer sequence is ready whenever you are. Just tell me which services you want me to take over, and I'll handle the rest.`,
 			peerName),
 		Meta: map[string]string{
-			"type":          "transfer_introduction",
-			"intake_ready":  "true",
+			"type":           "transfer_introduction",
+			"intake_ready":   "true",
 			"valve_endpoint": "/valve/offer",
 			"chat_endpoint":  "/transfer/chat",
 		},
 	}
 
 	data, _ := json.Marshal(intro)
-	select {
-	case c.sendCh <- data:
+	if c.queueToPeer(peer, data) {
 		logger.InfoC("openclaw", "Transfer introduction sent to OpenClaw peer")
-	default:
+	} else {
 		logger.WarnC("openclaw", "Could not queue transfer introduction (buffer full)")
 	}
 }
 
-func (c *OpenClawChannel) handleIncomingMessage(env openclawEnvelope) {
-	c.readyMu.RLock()
-	ready := c.ready
-	c.readyMu.RUnlock()
-
+func (c *OpenClawChannel) handleIncomingMessage(peer *openclawPeer, env openclawEnvelope) {
+	c.peersMu.RLock()
+	ready := peer.ready
+	c.peersMu.RUnlock()
 	if !ready {
 		logger.WarnC("openclaw", "Dropping message: handshake not completed")
 		return
@@ -335,39 +329,88 @@ func (c *OpenClawChannel) handleIncomingMessage(env openclawEnvelope) {
 	c.HandleMessage(senderID, chatID, env.Content, nil, metadata)
 }
 
-func (c *OpenClawChannel) writePump(conn *websocket.Conn) {
+func (c *OpenClawChannel) writePump(peer *openclawPeer) {
 	ticker := time.NewTicker(openclawPingInterval)
 	defer func() {
 		ticker.Stop()
-		_ = conn.Close()
+		_ = peer.conn.Close()
 	}()
 
 	for {
 		select {
-		case msg, ok := <-c.sendCh:
-			_ = conn.SetWriteDeadline(time.Now().Add(openclawWriteTimeout))
+		case msg, ok := <-peer.sendCh:
+			_ = peer.conn.SetWriteDeadline(time.Now().Add(openclawWriteTimeout))
 			if !ok {
-				_ = conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = peer.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			if err := peer.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				logger.ErrorCF("openclaw", "WebSocket write error", map[string]any{"error": err.Error()})
 				return
 			}
 		case <-ticker.C:
-			_ = conn.SetWriteDeadline(time.Now().Add(openclawWriteTimeout))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			_ = peer.conn.SetWriteDeadline(time.Now().Add(openclawWriteTimeout))
+			if err := peer.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
 	}
 }
 
-func (c *OpenClawChannel) sendPong() {
+func (c *OpenClawChannel) sendPong(peer *openclawPeer) {
 	env := openclawEnvelope{Type: "pong", Sender: "spiderweb"}
 	data, _ := json.Marshal(env)
+	c.queueToPeer(peer, data)
+}
+
+func (c *OpenClawChannel) registerPeer(conn *websocket.Conn, remoteAddr string) *openclawPeer {
+	if conn == nil {
+		conn = &websocket.Conn{}
+	}
+	peer := &openclawPeer{
+		conn:       conn,
+		remoteAddr: remoteAddr,
+		peerID:     remoteAddr,
+		sendCh:     make(chan []byte, 64),
+	}
+	c.peersMu.Lock()
+	c.peers[conn] = peer
+	c.peersMu.Unlock()
+	return peer
+}
+
+func (c *OpenClawChannel) unregisterPeer(conn *websocket.Conn) {
+	c.peersMu.Lock()
+	peer, ok := c.peers[conn]
+	if ok {
+		delete(c.peers, conn)
+	}
+	c.peersMu.Unlock()
+	if ok {
+		close(peer.sendCh)
+	}
+}
+
+func (c *OpenClawChannel) readyPeers() []*openclawPeer {
+	c.peersMu.RLock()
+	defer c.peersMu.RUnlock()
+	peers := make([]*openclawPeer, 0, len(c.peers))
+	for _, peer := range c.peers {
+		if peer.ready {
+			peers = append(peers, peer)
+		}
+	}
+	return peers
+}
+
+func (c *OpenClawChannel) queueToPeer(peer *openclawPeer, data []byte) bool {
+	if peer == nil {
+		return false
+	}
 	select {
-	case c.sendCh <- data:
+	case peer.sendCh <- data:
+		return true
 	default:
+		return false
 	}
 }

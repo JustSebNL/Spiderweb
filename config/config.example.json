@@ -269,7 +269,11 @@
     "follow_up_window_sec": 180,
     "follow_up_max_items": 5,
     "forward_url": "",
-    "forward_timeout": 5
+    "forward_timeout": 5,
+    "forward_allow_channels": [],
+    "forward_deny_channels": [],
+    "forward_allow_services": [],
+    "forward_deny_services": []
   },
   "heartbeat": {
     "enabled": true,

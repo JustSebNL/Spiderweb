@@ -35,6 +35,7 @@ Bootstrap prepares the machine from front to back:
 - installs prerequisites
 - installs Spiderweb core
 - prepares `brain/`
+- prepares a persistent Hugging Face cache under `~/.spiderweb/hf`
 - selects the cheap-cognition runtime
 - downloads the matching model format
 - writes runtime settings to `~/.spiderweb/runtime.env`
@@ -47,6 +48,7 @@ Local runtime/setup files:
 - `~/.spiderweb/runtime.env`
 - `~/.spiderweb/setup-notes.txt`
 - `~/.spiderweb/bootstrap-state.env`
+- `~/.spiderweb/hf/`
 
 Repo-side install files:
 - `bootstrap.sh`
@@ -61,6 +63,8 @@ Common settings:
 - `SPIDERWEB_DIR`
 - `INSTALL_PREFIX`
 - `BRAIN_DIR`
+- `HF_HOME_DIR`
+- `HF_HUB_CACHE_DIR`
 - `CHEAP_COGNITION_RUNTIME`
 - `AUTO_START_MODEL_SERVICE`
 
@@ -70,6 +74,8 @@ Example:
 SPIDERWEB_DIR="/opt/spiderweb"
 INSTALL_PREFIX="/opt/spiderweb/.local"
 BRAIN_DIR="/opt/spiderweb/brain"
+HF_HOME_DIR="$HOME/.spiderweb/hf"
+HF_HUB_CACHE_DIR="$HF_HOME_DIR/hub"
 CHEAP_COGNITION_RUNTIME="auto"
 AUTO_START_MODEL_SERVICE="1"
 ```
@@ -88,6 +94,12 @@ Then start Spiderweb:
 ```bash
 sweb wakeup
 ```
+
+The generated runtime env now also carries:
+- `HF_HOME`
+- `HF_HUB_CACHE`
+
+That keeps Hugging Face downloads and warm restarts pointed at a stable cache directory.
 
 ## Related Docs
 - [Startup And Daily Use](./startup-and-daily-use.md)

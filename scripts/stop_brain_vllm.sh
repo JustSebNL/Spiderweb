@@ -4,15 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$REPO_DIR/brain}}"
-YOUTU_DIR="${YOUTU_DIR:-$BRAIN_DIR}"
-YOUTU_VLLM_PID_FILE="${YOUTU_VLLM_PID_FILE:-$YOUTU_DIR/youtu-vllm.pid}"
+BRAIN_VLLM_PID_FILE="${BRAIN_VLLM_PID_FILE:-${YOUTU_VLLM_PID_FILE:-$BRAIN_DIR/brain-vllm.pid}}"
 
-if [ ! -f "$YOUTU_VLLM_PID_FILE" ]; then
-  echo "[INFO] youtu-vllm pid file not found"
+if [ ! -f "$BRAIN_VLLM_PID_FILE" ]; then
+  echo "[INFO] brain-vllm pid file not found"
   exit 0
 fi
 
-PID="$(cat "$YOUTU_VLLM_PID_FILE")"
+PID="$(cat "$BRAIN_VLLM_PID_FILE")"
 if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
   kill "$PID"
   for _ in $(seq 1 20); do
@@ -26,5 +25,5 @@ if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
   fi
 fi
 
-rm -f "$YOUTU_VLLM_PID_FILE"
-echo "[INFO] youtu-vllm stopped"
+rm -f "$BRAIN_VLLM_PID_FILE"
+echo "[INFO] brain-vllm stopped"

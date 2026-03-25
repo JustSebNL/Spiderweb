@@ -49,6 +49,15 @@ Required behavior:
 - allow direct high-priority escalation when rules say so
 - surface service health issue separately
 
+Current implemented behavior:
+- Spiderweb still forwards to OpenClaw when the cheap classifier fails
+- the forwarded packet is marked with:
+  - `routing_mode=degraded`
+  - `cheap_cognition=unavailable`
+  - `intake_forward_decision=forward_degraded`
+  - `fallback_reason=<classifier error>`
+- this preserves truthful degraded-state signaling even before a full durable journal exists
+
 ### 4. OpenClaw unavailable
 Required behavior:
 - retain escalation packets in queue
@@ -70,6 +79,51 @@ After recovery, the system should be able to:
 - rebuild missing normalized/routing state
 - continue from the last truthful checkpoint
 
+## Current Spiderweb degraded-forward pattern
+
+When cheap cognition fails in the current code, Spiderweb does not stop the intake path.
+
+Instead it:
+- keeps the inbound event moving
+- marks the metadata as degraded
+- preserves the classifier error string in `fallback_reason`
+- forwards to OpenClaw if the route policy still allows it
+
+This is the current practical contract:
+
+```json
+{
+  "routing_mode": "degraded",
+  "cheap_cognition": "unavailable",
+  "intake_forward_decision": "forward_degraded",
+  "fallback_reason": "cheap cognition request failed: status=503 body=service unavailable"
+}
+```
+
+## Current local-agent degraded note pattern
+
+When cheap cognition succeeds, the local agent path receives a compact intake note.
+
+Example:
+
+```text
+[Intake triage: priority=high category=alert summary="important event"]
+
+original user content...
+```
+
+When cheap cognition is unavailable, the local agent path receives a degraded note instead.
+
+Example:
+
+```text
+[Intake degraded mode: vllm health check failed]
+
+original user content...
+```
+
+This keeps the local agent truthful about intake quality without blocking normal operation.
+
 ## Example degraded-mode note
 
 ```json
@@ -78,7 +132,7 @@ After recovery, the system should be able to:
   "routing_mode": "degraded",
   "cheap_cognition": "unavailable",
   "fallback_reason": "vllm health check failed",
-  "next_action": "queued for retry"
+  "intake_forward_decision": "forward_degraded"
 }
 ```
 

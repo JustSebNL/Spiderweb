@@ -83,6 +83,50 @@ If the system cannot explain why it escalated something, the route is too opaque
 3. cheap summarization/classification if needed
 4. final route assignment
 
+## Current Spiderweb routing levers
+
+The current codebase already supports some practical routing controls:
+- `intake.forward_allow_channels`
+- `intake.forward_deny_channels`
+- `intake.forward_allow_services`
+- `intake.forward_deny_services`
+
+These affect the OpenClaw forward path before a packet is posted.
+
+Example:
+
+```json
+{
+  "intake": {
+    "forward_allow_channels": ["slack", "telegram"],
+    "forward_deny_channels": ["discord"],
+    "forward_allow_services": ["alerts", "deployments"],
+    "forward_deny_services": ["noisy-heartbeats"]
+  }
+}
+```
+
+Practical effect:
+- Slack and Telegram may forward
+- Discord will not forward
+- only `alerts` and `deployments` service sources may forward
+- `noisy-heartbeats` is always denied even if it appears in an allowed channel
+
+## Current cheap-cognition enrichment role
+
+Cheap cognition is now an intake enrichment layer, not only an OpenClaw helper.
+
+Current outcomes:
+- successful enrichment adds `routing_mode=cheap_cognition`
+- degraded enrichment adds `routing_mode=degraded`
+- local agent prompts receive a compact intake note
+- OpenClaw forwarding reuses the same metadata
+
+This means the current routing path can already distinguish:
+- classified intake
+- degraded intake
+- direct no-enrichment intake
+
 ## Examples
 
 ### Example 1: ignore

@@ -17,9 +17,9 @@ Required behavior:
 - first start downloads from Hugging Face
 - weights land in a persistent mounted cache
 - later restarts reuse the cache
-- native `vLLM` path only proceeds when the required Youtu integration files exist under `infra/vllm/patches/`
+- native `vLLM` path requires the Youtu integration files under `infra/vllm/patches/` (now present)
 
-Required local patch files:
+Required local patch files (present in repo):
 - `infra/vllm/patches/youtu_llm.py`
 - `infra/vllm/patches/configuration_youtu.py`
 - `infra/vllm/patches/registry.py`

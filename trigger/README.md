@@ -10,9 +10,8 @@ This workspace hosts the optional Trigger.dev tasks used by Spiderweb for cheap 
 ## Setup
 1. Copy `.env.example` to `.env`.
 2. Fill in Trigger.dev credentials and local runtime paths.
-3. Add the required Youtu `vLLM` patch files under `../infra/vllm/patches/`.
-4. Install dependencies.
-5. Run `trigger.dev dev` or deploy from this directory.
+3. Install dependencies.
+4. Run `trigger.dev dev` or deploy from this directory.
 
 ## Important
 This workspace is optional.

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$REPO_DIR/brain}}"
+BRAIN_DIR="${BRAIN_DIR:-$REPO_DIR/brain}"
 BRAIN_VLLM_PID_FILE="${BRAIN_VLLM_PID_FILE:-${YOUTU_VLLM_PID_FILE:-$BRAIN_DIR/brain-vllm.pid}}"
 
 if [ ! -f "$BRAIN_VLLM_PID_FILE" ]; then

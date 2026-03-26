@@ -520,6 +520,23 @@ func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, cha
 	})
 }
 
+// ProcessJournal runs the observer journal agent independently.
+// It receives a pre-formatted prompt with the day's raw observer data
+// and returns the LLM-generated journal text.
+func (al *AgentLoop) ProcessJournal(ctx context.Context, prompt string) (string, error) {
+	agent := al.registry.GetDefaultAgent()
+	return al.runAgentLoop(ctx, agent, processOptions{
+		SessionKey:      "observer-journal",
+		Channel:         "system",
+		ChatID:          "journal",
+		UserMessage:     prompt,
+		DefaultResponse: "",
+		EnableSummary:   false,
+		SendResponse:    false,
+		NoHistory:       true,
+	})
+}
+
 func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage) (string, error) {
 	// Add message preview to log (show full content for error messages)
 	var logContent string

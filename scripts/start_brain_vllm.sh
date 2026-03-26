@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PATCHES_DIR="${PATCHES_DIR:-$REPO_DIR/infra/vllm/patches}"
 
-BRAIN_DIR="${BRAIN_DIR:-${YOUTU_DIR:-$REPO_DIR/brain}}"
+BRAIN_DIR="${BRAIN_DIR:-$REPO_DIR/brain}"
 BRAIN_MODEL_CACHE_DIR="${BRAIN_MODEL_CACHE_DIR:-${YOUTU_CACHE_DIR:-$BRAIN_DIR/model-cache}}"
 HF_HOME="${HF_HOME:-${HF_HOME_DIR:-$HOME/.spiderweb/hf}}"
 HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HUB_CACHE_DIR:-$HF_HOME/hub}}"

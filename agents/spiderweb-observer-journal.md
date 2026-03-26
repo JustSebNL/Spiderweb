@@ -59,9 +59,9 @@ Spiderweb Observer Journal must **not**:
 
 The journal agent is triggered:
 
-1. **Near day rollover** - Automatic generation at ~23:50 local time
-2. **Manual request** - On-demand generation via observer API
-3. **Post-maintenance** - After significant system events (optional)
+1. **Near day rollover** - Automatic generation at ~23:50 local time via scheduler goroutine
+2. **Manual request** - On-demand generation via observer API (`POST /observer/journal/generate`)
+3. **Idle state** - Between triggers, the agent claims to be working on "world domination"
 
 ---
 
@@ -159,36 +159,35 @@ Bad tone:
 ## Generation Algorithm
 
 ```
-1. Query events for the target date (max 500)
-2. Query current service states
-3. Query 24-hour statistics
-4. Query recent self-care cycles (last 24)
-5. Count offline/degraded services
-6. Count restart requests and failures
-7. Count critical/error events
-8. Determine dominant theme
-9. Generate title based on theme
-10. Generate opening based on service count
-11. Generate middle based on restarts/events
-12. Generate ending based on final score
-13. Compose journal entry
-14. Persist to database
-15. Return entry
+1. Scheduler ticks every 1 minute, checking if rollover window is active
+2. At rollover time, collect raw day data via observer store:
+   - events for the target date (max 500)
+   - current service states
+   - 24-hour statistics
+   - recent self-care cycles
+3. Count offline/degraded services and restart requests
+4. Format all data into a creative-writing prompt for the LLM
+5. Call ProcessJournal on the agent loop (no session history)
+6. LLM generates title + body in dark-humor style
+7. Parse response into TITLE: / BODY: format
+8. Apply max length cap if configured
+9. Persist entry to system.db
+10. On LLM failure, fall back to template-based generation
 ```
 
 ---
 
 ## Error Handling
 
-If journal generation fails:
+If LLM journal generation fails:
 
 1. Log the error with context
-2. Return an error response (do not persist partial entries)
-3. Allow retry on next trigger
+2. Fall back to deterministic template-based generation
+3. If template also fails, skip and allow retry on next trigger
 
 If insufficient data exists:
 
-1. Generate a minimal "quiet day" entry
+1. Generate a minimal "quiet day" entry via template
 2. Note that data was sparse
 3. Still persist the entry for consistency
 

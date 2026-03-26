@@ -307,6 +307,69 @@ func TestMaintenance_CollectSnapshot_RestartConsumesBudget(t *testing.T) {
 	}
 }
 
+func TestMaintenance_CollectSnapshot_EnrichesCycleMetadata(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	triggerCtl := &fakeRuntimeController{}
+	previous := &HealthSnapshot{
+		Timestamp: time.Now().Add(-15 * time.Minute),
+		Score:     75,
+		Summary:   "watch",
+	}
+	baseline := &HealthSnapshot{
+		Timestamp: time.Now().Add(-2 * time.Hour),
+		Score:     98,
+		Summary:   "healthy",
+		CheapCognition: CheapCognitionSnapshot{
+			LastLatencyMS: 100,
+		},
+	}
+
+	svc := NewService(
+		workspace,
+		config.MaintenanceConfig{
+			Enabled:               true,
+			AutoRemediate:         true,
+			BudgetPercent:         5,
+			MaxLogMB:              1,
+			RestartBackoffMinutes: 30,
+			RestartOnProcessDeath: true,
+		},
+		config.CheapCognitionConfig{},
+		config.TriggerConfig{
+			Enabled:   true,
+			AutoStart: true,
+			Workdir:   filepath.Join(workspace, "trigger"),
+			PIDFile:   filepath.Join(workspace, "trigger.pid"),
+			LogFile:   filepath.Join(workspace, "trigger.log"),
+		},
+		nil,
+		triggerCtl,
+		nil,
+	)
+
+	snapshot := svc.collectSnapshot(context.Background(), baseline, previous, false)
+	if snapshot.BaselineScore != baseline.Score || snapshot.BaselineSummary != baseline.Summary {
+		t.Fatalf("expected baseline metadata to be copied, got score=%d summary=%q", snapshot.BaselineScore, snapshot.BaselineSummary)
+	}
+	if snapshot.PreCheckScore != previous.Score || snapshot.PreCheckSummary != previous.Summary {
+		t.Fatalf("expected previous snapshot metadata to be copied, got score=%d summary=%q", snapshot.PreCheckScore, snapshot.PreCheckSummary)
+	}
+	if snapshot.PostCareScore != snapshot.Score || snapshot.PostCareSummary != snapshot.Summary {
+		t.Fatalf("expected post-care metadata to mirror final snapshot, got score=%d/%d summary=%q/%q", snapshot.PostCareScore, snapshot.Score, snapshot.PostCareSummary, snapshot.Summary)
+	}
+	if snapshot.ScoreDelta != snapshot.Score-previous.Score {
+		t.Fatalf("expected score delta %d, got %d", snapshot.Score-previous.Score, snapshot.ScoreDelta)
+	}
+	if snapshot.CycleDurationMs < 0 {
+		t.Fatalf("expected non-negative cycle duration")
+	}
+	if len(snapshot.ActionsTaken) == 0 {
+		t.Fatalf("expected actions taken to capture remediation request")
+	}
+}
+
 func TestMaintenance_RunOnce_WritesSystemDB(t *testing.T) {
 	t.Parallel()
 

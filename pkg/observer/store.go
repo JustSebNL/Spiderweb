@@ -106,20 +106,24 @@ type SelfCareCycle struct {
 	ComparedTo            string    `json:"compared_to,omitempty"`
 	LastRemediationAt     time.Time `json:"last_remediation_at,omitempty"`
 	LastRemediationAction string    `json:"last_remediation_action,omitempty"`
-	
+	BaselineSnapshotID    int       `json:"baseline_snapshot_id,omitempty"`
+	PreCheckSnapshotID    int       `json:"pre_check_snapshot_id,omitempty"`
+	PostCareSnapshotID    int       `json:"post_care_snapshot_id,omitempty"`
+
 	// Enhanced cycle tracking
-	BaselineScore    int       `json:"baseline_score,omitempty"`
-	BaselineSummary  string    `json:"baseline_summary,omitempty"`
-	BaselineAt       time.Time `json:"baseline_at,omitempty"`
-	PreCheckScore    int       `json:"pre_check_score,omitempty"`
-	PreCheckSummary  string    `json:"pre_check_summary,omitempty"`
-	PreCheckAt       time.Time `json:"pre_check_at,omitempty"`
-	PostCareScore    int       `json:"post_care_score,omitempty"`
-	PostCareSummary  string    `json:"post_care_summary,omitempty"`
-	PostCareAt       time.Time `json:"post_care_at,omitempty"`
-	CycleDurationMs  int64     `json:"cycle_duration_ms,omitempty"`
-	ScoreDelta       int       `json:"score_delta,omitempty"`
-	ActionsTaken     []string  `json:"actions_taken,omitempty"`
+	BaselineScore   int       `json:"baseline_score,omitempty"`
+	BaselineSummary string    `json:"baseline_summary,omitempty"`
+	BaselineAt      time.Time `json:"baseline_at,omitempty"`
+	PreCheckScore   int       `json:"pre_check_score,omitempty"`
+	PreCheckSummary string    `json:"pre_check_summary,omitempty"`
+	PreCheckAt      time.Time `json:"pre_check_at,omitempty"`
+	PostCareScore   int       `json:"post_care_score,omitempty"`
+	PostCareSummary string    `json:"post_care_summary,omitempty"`
+	PostCareAt      time.Time `json:"post_care_at,omitempty"`
+	CycleDurationMs int64     `json:"cycle_duration_ms,omitempty"`
+	ScoreDelta      int       `json:"score_delta,omitempty"`
+	ActionsTaken    []string  `json:"actions_taken,omitempty"`
+	RegressionFlags []string  `json:"regression_flags,omitempty"`
 }
 
 type SelfCareCyclesResponse struct {
@@ -144,11 +148,11 @@ type JournalResponse struct {
 }
 
 type JournalScheduleConfig struct {
-	Enabled    bool   `json:"enabled"`
-	CronExpr   string `json:"cron_expr"`   // Default: "50 23 * * *" (23:50 daily)
-	Timezone   string `json:"timezone"`     // Default: "UTC"
-	LastRunAt  time.Time `json:"last_run_at,omitempty"`
-	NextRunAt  time.Time `json:"next_run_at,omitempty"`
+	Enabled   bool      `json:"enabled"`
+	CronExpr  string    `json:"cron_expr"` // Default: "50 23 * * *" (23:50 daily)
+	Timezone  string    `json:"timezone"`  // Default: "UTC"
+	LastRunAt time.Time `json:"last_run_at,omitempty"`
+	NextRunAt time.Time `json:"next_run_at,omitempty"`
 }
 
 type JournalConfig struct {
@@ -472,6 +476,10 @@ func (s *Store) SelfCareCycles(limit int) (*SelfCareCyclesResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	snapshotIDByTime := make(map[string]int, len(snapshots))
+	for _, item := range snapshots {
+		snapshotIDByTime[item.CreatedAt.Format(time.RFC3339)] = item.ID
+	}
 	cycles := make([]SelfCareCycle, 0, len(snapshots))
 	for _, item := range snapshots {
 		cycle := SelfCareCycle{
@@ -484,6 +492,7 @@ func (s *Store) SelfCareCycles(limit int) (*SelfCareCyclesResponse, error) {
 			ComparedTo:            item.ComparedTo,
 			LastRemediationAt:     item.LastRemediationAt,
 			LastRemediationAction: item.LastRemediationAction,
+			PostCareSnapshotID:    item.ID,
 		}
 
 		// Parse enhanced cycle data from payload if available
@@ -491,10 +500,31 @@ func (s *Store) SelfCareCycles(limit int) (*SelfCareCyclesResponse, error) {
 			var payload map[string]any
 			if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err == nil {
 				// Extract baseline info
+				if baselineScore, ok := payload["baseline_score"].(float64); ok {
+					cycle.BaselineScore = int(baselineScore)
+				}
+				if baselineSummary, ok := payload["baseline_summary"].(string); ok {
+					cycle.BaselineSummary = baselineSummary
+				}
+				if baselineAt, ok := payload["baseline_at"].(string); ok {
+					if t, err := time.Parse(time.RFC3339, baselineAt); err == nil {
+						cycle.BaselineAt = t
+						cycle.BaselineSnapshotID = snapshotIDByTime[t.Format(time.RFC3339)]
+					}
+				}
 				if baseline, ok := payload["baseline"].(bool); ok && baseline {
-					cycle.BaselineScore = cycle.Score
-					cycle.BaselineSummary = cycle.Summary
-					cycle.BaselineAt = cycle.Timestamp
+					if cycle.BaselineScore == 0 {
+						cycle.BaselineScore = cycle.Score
+					}
+					if cycle.BaselineSummary == "" {
+						cycle.BaselineSummary = cycle.Summary
+					}
+					if cycle.BaselineAt.IsZero() {
+						cycle.BaselineAt = cycle.Timestamp
+					}
+					if cycle.BaselineSnapshotID == 0 {
+						cycle.BaselineSnapshotID = item.ID
+					}
 				}
 
 				// Extract pre-check info if available
@@ -507,6 +537,7 @@ func (s *Store) SelfCareCycles(limit int) (*SelfCareCyclesResponse, error) {
 				if preCheckAt, ok := payload["pre_check_at"].(string); ok {
 					if t, err := time.Parse(time.RFC3339, preCheckAt); err == nil {
 						cycle.PreCheckAt = t
+						cycle.PreCheckSnapshotID = snapshotIDByTime[t.Format(time.RFC3339)]
 					}
 				}
 
@@ -520,6 +551,9 @@ func (s *Store) SelfCareCycles(limit int) (*SelfCareCyclesResponse, error) {
 				if postCareAt, ok := payload["post_care_at"].(string); ok {
 					if t, err := time.Parse(time.RFC3339, postCareAt); err == nil {
 						cycle.PostCareAt = t
+						if cycle.PostCareSnapshotID == 0 {
+							cycle.PostCareSnapshotID = snapshotIDByTime[t.Format(time.RFC3339)]
+						}
 					}
 				}
 
@@ -541,7 +575,17 @@ func (s *Store) SelfCareCycles(limit int) (*SelfCareCyclesResponse, error) {
 						}
 					}
 				}
+				if flags, ok := payload["regression_flags"].([]any); ok {
+					for _, flag := range flags {
+						if flagStr, ok := flag.(string); ok {
+							cycle.RegressionFlags = append(cycle.RegressionFlags, flagStr)
+						}
+					}
+				}
 			}
+		}
+		if cycle.PostCareSnapshotID == 0 {
+			cycle.PostCareSnapshotID = item.ID
 		}
 
 		cycles = append(cycles, cycle)
@@ -642,6 +686,90 @@ func (s *Store) JournalScheduleMessage() string {
 	return "Generate daily observer journal"
 }
 
+// JournalDayData holds raw observer data for one day, used by the journal agent
+// to build its LLM prompt.
+type JournalDayData struct {
+	DateKey       string                    `json:"date_key"`
+	Events        []systemdb.Event          `json:"events"`
+	Services      []systemdb.ServiceStatus  `json:"services"`
+	Stats         systemdb.Stats24h         `json:"stats"`
+	Cycles        []systemdb.SnapshotRecord `json:"cycles"`
+	OfflineCount  int                       `json:"offline_count"`
+	DegradedCount int                       `json:"degraded_count"`
+	RestartCount  int                       `json:"restart_count"`
+	ErrorCount    int                       `json:"error_count"`
+	CriticalCount int                       `json:"critical_count"`
+	Score         int                       `json:"score"`
+	ScoreSummary  string                    `json:"score_summary"`
+}
+
+// CollectJournalDayData gathers all raw observer data for the given UTC date.
+func (s *Store) CollectJournalDayData(dateKey string) (*JournalDayData, error) {
+	dayStart, err := time.Parse("2006-01-02", dateKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date key: %w", err)
+	}
+	dayEnd := dayStart.Add(24 * time.Hour)
+
+	db, err := s.openSystemDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	events, _ := db.EventsBetween(dayStart, dayEnd, 500)
+	services, _ := db.CurrentServices()
+	stats, _ := db.Stats24h()
+	cycles, _ := db.RecentSnapshots(24)
+
+	data := &JournalDayData{
+		DateKey:  dateKey,
+		Events:   events,
+		Services: services,
+		Stats:    stats,
+		Cycles:   cycles,
+	}
+
+	for _, svc := range services {
+		switch svc.State {
+		case "offline":
+			data.OfflineCount++
+		case "degraded", "restarting":
+			data.DegradedCount++
+		}
+	}
+
+	for _, e := range events {
+		switch e.EventType {
+		case "restart_requested", "restart_failed":
+			data.RestartCount++
+		}
+		if e.Severity == "critical" {
+			data.CriticalCount++
+		}
+		if e.Severity == "error" {
+			data.ErrorCount++
+		}
+	}
+
+	if len(cycles) > 0 {
+		data.Score = cycles[0].Score
+		data.ScoreSummary = cycles[0].Summary
+	}
+
+	return data, nil
+}
+
+// SaveJournal persists a journal entry to the system database.
+func (s *Store) SaveJournal(entry systemdb.JournalEntry) error {
+	db, err := s.openSystemDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return db.UpsertJournal(entry)
+}
+
 // DefaultJournalSchedule returns the default schedule configuration for journal generation
 // Default: 23:50 UTC daily (near day rollover)
 func DefaultJournalSchedule() JournalScheduleConfig {
@@ -654,9 +782,9 @@ func DefaultJournalSchedule() JournalScheduleConfig {
 
 // ClearEventsResult represents the result of clearing old events
 type ClearEventsResult struct {
-	DeletedCount int       `json:"deleted_count"`
-	RetentionDays int      `json:"retention_days"`
-	ClearedAt   time.Time  `json:"cleared_at"`
+	DeletedCount  int       `json:"deleted_count"`
+	RetentionDays int       `json:"retention_days"`
+	ClearedAt     time.Time `json:"cleared_at"`
 }
 
 // ClearOldEvents removes events older than the specified retention period

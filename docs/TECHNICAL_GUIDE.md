@@ -235,12 +235,11 @@ Practical split:
 ## 11. Current Known Gaps
 
 These are important current truths:
-- Youtu-specific `vLLM` patch files are still missing under `infra/vllm/patches/`
-- native `vLLM` readiness is therefore not fully complete
 - shell/runtime verification from the current Windows-side session is limited
 - some docs and operational flows still need final validation from WSL
+- runtime health validation on real GPU hosts is still pending (model download, warm-start caching, latency benchmarks)
 
-## 11. Recommended Reading Order
+## 12. Recommended Reading Order
 
 For operators:
 1. [QUICKSTART.md](./QUICKSTART.md)

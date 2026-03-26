@@ -6,8 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-//go:generate cp -r ../../../../workspace .
-//go:generate cp -r ../../../../agents .
 //go:embed workspace agents
 var embeddedFiles embed.FS
 

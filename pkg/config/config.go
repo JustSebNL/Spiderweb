@@ -62,6 +62,7 @@ type Config struct {
 	Maintenance MaintenanceConfig `json:"maintenance"`
 	Heartbeat   HeartbeatConfig   `json:"heartbeat"`
 	Devices     DevicesConfig     `json:"devices"`
+	Observer    ObserverConfig    `json:"observer"`
 }
 
 // MarshalJSON implements custom JSON marshaling for Config
@@ -392,6 +393,41 @@ type DevicesConfig struct {
 	MonitorUSB bool `json:"monitor_usb" env:"SPIDERWEB_DEVICES_MONITOR_USB"`
 }
 
+type ObserverConfig struct {
+	Journal ObserverJournalConfig `json:"journal"`
+}
+
+type ObserverJournalConfig struct {
+	Enabled        bool   `json:"enabled"`
+	RolloverHour   int    `json:"rollover_hour"`
+	RolloverMinute int    `json:"rollover_minute"`
+	StyleMode      string `json:"style_mode"`
+	MaxLengthCap   int    `json:"max_length_cap"`
+	Timezone       string `json:"timezone"`
+}
+
+func (o ObserverConfig) withDefaults() ObserverConfig {
+	if !o.Journal.Enabled && o.Journal.RolloverHour == 0 && o.Journal.RolloverMinute == 0 {
+		o.Journal.Enabled = true
+	}
+	if o.Journal.RolloverHour < 0 || o.Journal.RolloverHour > 23 {
+		o.Journal.RolloverHour = 23
+	}
+	if o.Journal.RolloverMinute < 0 || o.Journal.RolloverMinute > 59 {
+		o.Journal.RolloverMinute = 50
+	}
+	if o.Journal.StyleMode == "" {
+		o.Journal.StyleMode = "dark_humor"
+	}
+	if o.Journal.MaxLengthCap < 0 {
+		o.Journal.MaxLengthCap = 2000
+	}
+	if o.Journal.Timezone == "" {
+		o.Journal.Timezone = "UTC"
+	}
+	return o
+}
+
 type ProvidersConfig struct {
 	Anthropic     ProviderConfig       `json:"anthropic"`
 	OpenAI        OpenAIProviderConfig `json:"openai"`
@@ -622,6 +658,9 @@ func LoadConfig(path string) (*Config, error) {
 	if err := cfg.ValidateModelList(); err != nil {
 		return nil, err
 	}
+
+	// Apply observer config defaults
+	cfg.Observer = cfg.Observer.withDefaults()
 
 	return cfg, nil
 }

@@ -90,15 +90,15 @@ The model should:
 This is why the current blueprint uses a persistent local cache path such as:
 - host/runtime path: `brain/model-cache`
 
-### 3. The Youtu integration is not fully complete yet
+### 3. The Youtu integration status
 
-The current repo scaffolding includes:
+The current repo includes:
 - Trigger workspace
 - Trigger tasks
 - native vLLM start helper script
-- patch directory placeholder
+- Youtu-specific `vLLM` patch files under `infra/vllm/patches/`
 
-The remaining blocker is the model-specific `vLLM` patch files referenced by the Youtu deployment path. Those files still need to be added from the official Youtu integration source.
+The patch files (`configuration_youtu.py`, `youtu_llm.py`, `registry.py`, `__init__.py`) are now present and compatible with `vLLM 0.10.2`. The native `vLLM` runtime is build-complete for the Youtu-LLM-2B model path.
 
 ## Local files this note relates to
 
@@ -109,4 +109,4 @@ The remaining blocker is the model-specific `vLLM` patch files referenced by the
 
 ## Next recommended step
 
-The next highest-value task is to source and add the Youtu `vLLM` patch files so the native `vLLM 0.10.2` runtime becomes build-complete rather than scaffold-only.
+The next highest-value task is operational validation: download the Youtu model on a real GPU host, verify warm-start caching, and benchmark latency to confirm the runtime meets the cheap-cognition throughput target.

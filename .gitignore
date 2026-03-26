@@ -1,32 +1,10 @@
-# Personal dev workspace
-/dev/
-/.snapshots/
-/.vscode/
-
-# Local auth and runtime state
-auth.json
-runtime.env
-bootstrap-state.env
-setup-notes.txt
-
-# Local env files
-.env
-.env.*
-!.env.example
-
-# Generated and local build output
-.generated/
-/build/
-/dist/
-/tmp/
-/temp/
-/spiderweb
-
-# Runtime artifacts
-*.pid
+build/
+spiderweb
+spiderweb.exe
+*.exe
 *.log
-maintenance-test.log
-
-# Raw local source material
-*.mhtml
-*.pdf
+node_modules/
+.spiderweb/
+.snapshots/
+.vscode/
+dev/

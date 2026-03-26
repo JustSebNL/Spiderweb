@@ -384,5 +384,15 @@ func DefaultConfig() *Config {
 			Enabled:    false,
 			MonitorUSB: true,
 		},
+		Observer: ObserverConfig{
+			Journal: ObserverJournalConfig{
+				Enabled:        true,
+				RolloverHour:   23,
+				RolloverMinute: 50,
+				StyleMode:      "dark_humor",
+				MaxLengthCap:   2000,
+				Timezone:       "UTC",
+			},
+		},
 	}
 }

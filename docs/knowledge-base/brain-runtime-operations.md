@@ -68,7 +68,7 @@ Expected files:
 
 Expected when:
 - runtime selection resolves to `llama_cpp`
-- or `vllm` is in `auto` mode but the native vLLM patch set is missing
+- or `vllm` is in `auto` mode but the host lacks GPU support
 
 Main process:
 - `llama-server`
@@ -80,17 +80,17 @@ Expected files:
 ## When `vllm` vs `llama.cpp` Is Expected
 
 `vllm`:
-- preferred when the host can support it
-- requires the Youtu integration files under `infra/vllm/patches/`
+- preferred when the host has GPU support
+- Youtu integration files are present under `infra/vllm/patches/`
 - requires the vLLM virtualenv and Python entrypoint
 
 `llama.cpp`:
-- used as the practical fallback when `vllm` is not available in `auto` mode
+- used as the practical fallback when the host lacks GPU support
 - still serves the local OpenAI-compatible endpoint path for cheap cognition
 
 Important current behavior:
-- if `CHEAP_COGNITION_RUNTIME=vllm` is explicitly requested and the patch set is missing, bootstrap fails clearly
-- if runtime is `auto` and the patch set is missing, bootstrap falls back to `llama.cpp`
+- if `CHEAP_COGNITION_RUNTIME=vllm` is explicitly requested and the host lacks GPU, bootstrap fails clearly
+- if runtime is `auto` and the host lacks GPU, bootstrap falls back to `llama.cpp`
 
 ## Useful Runtime Checks
 
@@ -125,14 +125,15 @@ Use the port that matches the selected runtime in `runtime.env`.
 
 ## Common Startup Failures
 
-### Missing native `vllm` patch files
+### No GPU available for `vllm`
 
 Symptom:
-- startup fails early for `vllm`
+- startup fails early for `vllm` when explicitly configured
 - or `auto` falls back to `llama.cpp`
 
 Cause:
-- one or more required files are missing under `infra/vllm/patches/`
+- host does not have a suitable NVIDIA-backed GPU
+- CUDA drivers are not installed or not detected
 
 ### Missing vLLM virtualenv
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +18,12 @@ import (
 	"github.com/JustSebNL/Spiderweb/pkg/constants"
 	"github.com/JustSebNL/Spiderweb/pkg/maintenance"
 )
+
+func localhostRequest(method, target string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, target, body)
+	req.RemoteAddr = "127.0.0.1:12345"
+	return req
+}
 
 func prepareObserverRuntime(t *testing.T) (*Server, string) {
 	t.Helper()
@@ -262,8 +269,15 @@ func TestObserverSelfCareCyclesHandler(t *testing.T) {
 
 	var resp struct {
 		Cycles []struct {
-			Kind  string `json:"kind"`
-			Score int    `json:"score"`
+			Kind               string   `json:"kind"`
+			Score              int      `json:"score"`
+			BaselineScore      int      `json:"baseline_score"`
+			BaselineSnapshotID int      `json:"baseline_snapshot_id"`
+			PostCareScore      int      `json:"post_care_score"`
+			PostCareSnapshotID int      `json:"post_care_snapshot_id"`
+			CycleDurationMs    int64    `json:"cycle_duration_ms"`
+			ActionsTaken       []string `json:"actions_taken"`
+			RegressionFlags    []string `json:"regression_flags"`
 		} `json:"cycles"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -271,6 +285,21 @@ func TestObserverSelfCareCyclesHandler(t *testing.T) {
 	}
 	if len(resp.Cycles) == 0 {
 		t.Fatalf("expected at least one self-care cycle")
+	}
+	if resp.Cycles[0].BaselineScore == 0 {
+		t.Fatalf("expected baseline score in self-care cycle payload")
+	}
+	if resp.Cycles[0].PostCareScore == 0 {
+		t.Fatalf("expected post-care score in self-care cycle payload")
+	}
+	if resp.Cycles[0].BaselineSnapshotID == 0 {
+		t.Fatalf("expected baseline snapshot id in self-care cycle payload")
+	}
+	if resp.Cycles[0].PostCareSnapshotID == 0 {
+		t.Fatalf("expected post-care snapshot id in self-care cycle payload")
+	}
+	if resp.Cycles[0].CycleDurationMs < 0 {
+		t.Fatalf("expected non-negative cycle duration")
 	}
 }
 
@@ -439,7 +468,7 @@ func TestObserverRestartHandler(t *testing.T) {
 	})
 
 	body := bytes.NewBufferString(`{"service":"trigger"}`)
-	req := httptest.NewRequest(http.MethodPost, "/observer/actions/restart", body)
+	req := localhostRequest(http.MethodPost, "/observer/actions/restart", body)
 	w := httptest.NewRecorder()
 	s.server.Handler.ServeHTTP(w, req)
 
@@ -455,7 +484,7 @@ func TestObserverSelfCareRunHandler(t *testing.T) {
 		return map[string]any{"ok": true, "action": "self_care_run"}, nil
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/observer/actions/self-care/run", nil)
+	req := localhostRequest(http.MethodPost, "/observer/actions/self-care/run", nil)
 	w := httptest.NewRecorder()
 	s.server.Handler.ServeHTTP(w, req)
 
@@ -484,7 +513,7 @@ func TestObserverGenerateAndLatestReportHandlers(t *testing.T) {
 		t.Fatalf("record presence: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/observer/reports/generate?limit=5", nil)
+	req := localhostRequest(http.MethodPost, "/observer/reports/generate?limit=5", nil)
 	w := httptest.NewRecorder()
 	s.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -512,7 +541,7 @@ func TestObserverGenerateAndLatestReportHandlers(t *testing.T) {
 func TestObserverJournalGenerateAndLatestHandlers(t *testing.T) {
 	s, _ := prepareObserverRuntime(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/observer/journal/generate", nil)
+	req := localhostRequest(http.MethodPost, "/observer/journal/generate", nil)
 	w := httptest.NewRecorder()
 	s.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

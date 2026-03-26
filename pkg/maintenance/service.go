@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,6 +61,19 @@ type HealthSnapshot struct {
 	CheapCognition        CheapCognitionSnapshot  `json:"cheap_cognition"`
 	LastRemediationAt     time.Time               `json:"last_remediation_at,omitempty"`
 	LastRemediationAction string                  `json:"last_remediation_action,omitempty"`
+	BaselineScore         int                     `json:"baseline_score,omitempty"`
+	BaselineSummary       string                  `json:"baseline_summary,omitempty"`
+	BaselineAt            time.Time               `json:"baseline_at,omitempty"`
+	PreCheckScore         int                     `json:"pre_check_score,omitempty"`
+	PreCheckSummary       string                  `json:"pre_check_summary,omitempty"`
+	PreCheckAt            time.Time               `json:"pre_check_at,omitempty"`
+	PostCareScore         int                     `json:"post_care_score,omitempty"`
+	PostCareSummary       string                  `json:"post_care_summary,omitempty"`
+	PostCareAt            time.Time               `json:"post_care_at,omitempty"`
+	CycleDurationMs       int64                   `json:"cycle_duration_ms,omitempty"`
+	ScoreDelta            int                     `json:"score_delta,omitempty"`
+	ActionsTaken          []string                `json:"actions_taken,omitempty"`
+	RegressionFlags       []string                `json:"regression_flags,omitempty"`
 }
 
 type Service struct {
@@ -206,6 +220,7 @@ func (s *Service) RunOnce(ctx context.Context) {
 }
 
 func (s *Service) collectSnapshot(ctx context.Context, baseline *HealthSnapshot, previous *HealthSnapshot, activeProbe bool) HealthSnapshot {
+	startedAt := time.Now().UTC()
 	now := time.Now().UTC()
 	snapshot := HealthSnapshot{
 		Timestamp:       now,
@@ -253,6 +268,7 @@ func (s *Service) collectSnapshot(ctx context.Context, baseline *HealthSnapshot,
 		snapshot.Score = 0
 	}
 	snapshot.Summary = summarizeScore(snapshot.Score)
+	s.enrichCycleMetadata(&snapshot, baseline, previous, startedAt)
 	return snapshot
 }
 
@@ -267,7 +283,7 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 
 	switch runtime {
 	case "vllm":
-		pidFile := envOrDefault("BRAIN_VLLM_PID_FILE", envOrDefault("YOUTU_VLLM_PID_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "brain-vllm.pid")))
+		pidFile := envOrDefault("BRAIN_VLLM_PID_FILE", envOrDefault("YOUTU_VLLM_PID_FILE", filepath.Join(envOrDefault("BRAIN_DIR", filepath.Join(filepath.Dir(s.workspace), "brain")), "brain-vllm.pid")))
 		state.PIDFile = pidFile
 		state.Running = pidAlive(pidFile)
 		if !state.Running {
@@ -303,12 +319,12 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 			}
 		}
 		if !deferMaintenance {
-			if trimmed, ok := trimLogIfNeeded(envOrDefault("BRAIN_VLLM_LOG_FILE", envOrDefault("YOUTU_VLLM_LOG_FILE", filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "brain-vllm.log"))), s.cfg.MaxLogMB, cleanupBudget); ok {
+			if trimmed, ok := trimLogIfNeeded(envOrDefault("BRAIN_VLLM_LOG_FILE", envOrDefault("YOUTU_VLLM_LOG_FILE", filepath.Join(envOrDefault("BRAIN_DIR", filepath.Join(filepath.Dir(s.workspace), "brain")), "brain-vllm.log"))), s.cfg.MaxLogMB, cleanupBudget); ok {
 				notes = append(notes, trimmed)
 			}
 		}
 	case "llama_cpp":
-		pidFile := filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "llama-server.pid")
+		pidFile := filepath.Join(envOrDefault("BRAIN_DIR", filepath.Join(filepath.Dir(s.workspace), "brain")), "llama-server.pid")
 		state.PIDFile = pidFile
 		state.Running = pidAlive(pidFile)
 		if !state.Running {
@@ -321,7 +337,7 @@ func (s *Service) inspectCheapRuntime(ctx context.Context, activeProbe bool, def
 			}
 		}
 		if !deferMaintenance {
-			if trimmed, ok := trimLogIfNeeded(filepath.Join(envOrDefault("BRAIN_DIR", envOrDefault("YOUTU_DIR", filepath.Join(filepath.Dir(s.workspace), "brain"))), "llama-server.log"), s.cfg.MaxLogMB, cleanupBudget); ok {
+			if trimmed, ok := trimLogIfNeeded(filepath.Join(envOrDefault("BRAIN_DIR", filepath.Join(filepath.Dir(s.workspace), "brain")), "llama-server.log"), s.cfg.MaxLogMB, cleanupBudget); ok {
 				notes = append(notes, trimmed)
 			}
 		}
@@ -598,6 +614,42 @@ func mergeRemediation(snapshot HealthSnapshot, state ProcessState) HealthSnapsho
 	return snapshot
 }
 
+func (s *Service) enrichCycleMetadata(snapshot *HealthSnapshot, baseline *HealthSnapshot, previous *HealthSnapshot, startedAt time.Time) {
+	if snapshot == nil {
+		return
+	}
+
+	snapshot.PostCareScore = snapshot.Score
+	snapshot.PostCareSummary = snapshot.Summary
+	snapshot.PostCareAt = snapshot.Timestamp
+	if !startedAt.IsZero() {
+		snapshot.CycleDurationMs = snapshot.Timestamp.Sub(startedAt).Milliseconds()
+		if snapshot.CycleDurationMs < 0 {
+			snapshot.CycleDurationMs = 0
+		}
+	}
+
+	if baseline != nil {
+		snapshot.BaselineScore = baseline.Score
+		snapshot.BaselineSummary = baseline.Summary
+		snapshot.BaselineAt = baseline.Timestamp
+	}
+	if previous != nil {
+		snapshot.PreCheckScore = previous.Score
+		snapshot.PreCheckSummary = previous.Summary
+		snapshot.PreCheckAt = previous.Timestamp
+		snapshot.ScoreDelta = snapshot.Score - previous.Score
+	}
+	if snapshot.Baseline && snapshot.BaselineScore == 0 {
+		snapshot.BaselineScore = snapshot.Score
+		snapshot.BaselineSummary = snapshot.Summary
+		snapshot.BaselineAt = snapshot.Timestamp
+	}
+
+	snapshot.ActionsTaken = actionsTaken(snapshot.Processes)
+	snapshot.RegressionFlags = regressionFlags(snapshot, baseline, previous)
+}
+
 func (s *Service) maintenanceBudgetSlots() int {
 	switch {
 	case s.cfg.BudgetPercent <= 0:
@@ -789,6 +841,60 @@ func deltaCounter(current, previous int64) int64 {
 		return 0
 	}
 	return current - previous
+}
+
+func actionsTaken(processes map[string]ProcessState) []string {
+	if len(processes) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(processes))
+	for key := range processes {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	actions := make([]string, 0, len(keys))
+	for _, key := range keys {
+		proc := processes[key]
+		if proc.Action == "" {
+			continue
+		}
+		actions = append(actions, proc.Name+":"+proc.Action)
+	}
+	if len(actions) == 0 {
+		return nil
+	}
+	return actions
+}
+
+func regressionFlags(snapshot *HealthSnapshot, baseline *HealthSnapshot, previous *HealthSnapshot) []string {
+	if snapshot == nil {
+		return nil
+	}
+	var flags []string
+	if baseline != nil {
+		if snapshot.Score < baseline.Score-20 {
+			flags = append(flags, "baseline_score_regression")
+		}
+		if baseline.CheapCognition.LastLatencyMS > 0 && snapshot.CheapCognition.LastLatencyMS > baseline.CheapCognition.LastLatencyMS*2 {
+			flags = append(flags, "cheap_cognition_latency_regression")
+		}
+		if baseline.CheapCognition.ClassificationFails == 0 && snapshot.CheapCognition.ClassificationFails > 0 {
+			flags = append(flags, "cheap_cognition_failure_regression")
+		}
+	}
+	if previous != nil {
+		if snapshot.Score < previous.Score {
+			flags = append(flags, "cycle_score_down")
+		}
+		if snapshot.LastRemediationAction != "" && snapshot.Score <= previous.Score {
+			flags = append(flags, "remediation_no_improvement")
+		}
+	}
+	if len(flags) == 0 {
+		return nil
+	}
+	return flags
 }
 
 func maxInt(a, b int) int {

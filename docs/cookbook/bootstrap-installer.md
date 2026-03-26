@@ -35,8 +35,8 @@ Useful controls:
 - `./bootstrap.sh --show-state`
 - `./bootstrap.sh --reset-state`
 
-## Important limitation
-The stack installer is scaffolded, but the full `vLLM` image will only build after the Youtu-specific patch files are added under `infra/vllm/patches/`.
+## Important note
+The Youtu-specific `vLLM` patch files are present under `infra/vllm/patches/`. The native `vLLM` runtime is build-complete for Youtu-LLM-2B. Remaining work is operational validation on a real GPU host.
 
 ## Important rule
 This bootstrap path should aim for repeatable host preparation, but it must still remain truthful about incomplete steps. If it skips or cannot complete model serving, it should state that clearly rather than silently claiming a ready system.

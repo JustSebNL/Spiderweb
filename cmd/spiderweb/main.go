@@ -18,6 +18,7 @@ import (
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/cron"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/gateway"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/migrate"
+	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/openclaw"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/skills"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/status"
 	"github.com/JustSebNL/Spiderweb/cmd/spiderweb/internal/transfer"
@@ -43,6 +44,7 @@ func NewSpiderwebCommand() *cobra.Command {
 		status.NewStatusCommand(),
 		cron.NewCronCommand(),
 		migrate.NewMigrateCommand(),
+		openclaw.NewOpenClawCommand(),
 		skills.NewSkillsCommand(),
 		transfer.NewTransferCommand(),
 		version.NewVersionCommand(),

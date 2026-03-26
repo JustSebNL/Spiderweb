@@ -323,12 +323,17 @@ type WeComAppConfig struct {
 }
 
 type OpenClawConfig struct {
-	Enabled       bool                `json:"enabled"          env:"SPIDERWEB_CHANNELS_OPENCLAW_ENABLED"`
-	SharedSecret  string              `json:"shared_secret"    env:"SPIDERWEB_CHANNELS_OPENCLAW_SHARED_SECRET"`
-	AllowFrom     FlexibleStringSlice `json:"allow_from"       env:"SPIDERWEB_CHANNELS_OPENCLAW_ALLOW_FROM"`
-	AutoHandshake bool                `json:"auto_handshake"   env:"SPIDERWEB_CHANNELS_OPENCLAW_AUTO_HANDSHAKE"`
-	IntakeEnabled bool                `json:"intake_enabled"   env:"SPIDERWEB_CHANNELS_OPENCLAW_INTAKE_ENABLED"`
-	WebhookPath   string              `json:"webhook_path"     env:"SPIDERWEB_CHANNELS_OPENCLAW_WEBHOOK_PATH"`
+	Enabled               bool                `json:"enabled"                  env:"SPIDERWEB_CHANNELS_OPENCLAW_ENABLED"`
+	SharedSecret          string              `json:"shared_secret"            env:"SPIDERWEB_CHANNELS_OPENCLAW_SHARED_SECRET"`
+	AllowFrom             FlexibleStringSlice `json:"allow_from"               env:"SPIDERWEB_CHANNELS_OPENCLAW_ALLOW_FROM"`
+	AutoHandshake         bool                `json:"auto_handshake"           env:"SPIDERWEB_CHANNELS_OPENCLAW_AUTO_HANDSHAKE"`
+	IntakeEnabled         bool                `json:"intake_enabled"           env:"SPIDERWEB_CHANNELS_OPENCLAW_INTAKE_ENABLED"`
+	WebhookPath           string              `json:"webhook_path"             env:"SPIDERWEB_CHANNELS_OPENCLAW_WEBHOOK_PATH"`
+	Endpoint              string              `json:"endpoint"                 env:"SPIDERWEB_CHANNELS_OPENCLAW_ENDPOINT"`
+	DiscoveryInterval     int                 `json:"discovery_interval"       env:"SPIDERWEB_CHANNELS_OPENCLAW_DISCOVERY_INTERVAL"`
+	HealthCheckInterval   int                 `json:"health_check_interval"    env:"SPIDERWEB_CHANNELS_OPENCLAW_HEALTH_CHECK_INTERVAL"`
+	SkillExecutionEnabled bool                `json:"skill_execution_enabled"  env:"SPIDERWEB_CHANNELS_OPENCLAW_SKILL_EXECUTION_ENABLED"`
+	ModelEnhancementEnabled bool              `json:"model_enhancement_enabled" env:"SPIDERWEB_CHANNELS_OPENCLAW_MODEL_ENHANCEMENT_ENABLED"`
 }
 
 type HeartbeatConfig struct {

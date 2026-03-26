@@ -38,6 +38,7 @@ func TestNewSpiderwebCommand(t *testing.T) {
 		"cron",
 		"gateway",
 		"migrate",
+		"openclaw",
 		"skills",
 		"status",
 		"transfer",

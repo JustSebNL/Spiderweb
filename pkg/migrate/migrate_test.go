@@ -590,7 +590,7 @@ func TestRewriteWorkspacePath(t *testing.T) {
 
 func TestRunDryRun(t *testing.T) {
 	openclawHome := t.TempDir()
-	picoClawHome := t.TempDir()
+	spiderwebHome := t.TempDir()
 
 	wsDir := filepath.Join(openclawHome, "workspace")
 	os.MkdirAll(wsDir, 0o755)
@@ -608,9 +608,9 @@ func TestRunDryRun(t *testing.T) {
 	os.WriteFile(filepath.Join(openclawHome, "openclaw.json"), data, 0o644)
 
 	opts := Options{
-		DryRun:       true,
-		OpenClawHome: openclawHome,
-		SpiderwebHome: picoClawHome,
+		DryRun:        true,
+		OpenClawHome:  openclawHome,
+		SpiderwebHome: spiderwebHome,
 	}
 
 	result, err := Run(opts)
@@ -618,11 +618,11 @@ func TestRunDryRun(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	picoWs := filepath.Join(picoClawHome, "workspace")
-	if _, err := os.Stat(filepath.Join(picoWs, "SOUL.md")); !os.IsNotExist(err) {
+	spiderwebWs := filepath.Join(spiderwebHome, "workspace")
+	if _, err := os.Stat(filepath.Join(spiderwebWs, "SOUL.md")); !os.IsNotExist(err) {
 		t.Error("dry run should not create files")
 	}
-	if _, err := os.Stat(filepath.Join(picoClawHome, "config.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(spiderwebHome, "config.json")); !os.IsNotExist(err) {
 		t.Error("dry run should not create config")
 	}
 
@@ -631,7 +631,7 @@ func TestRunDryRun(t *testing.T) {
 
 func TestRunFullMigration(t *testing.T) {
 	openclawHome := t.TempDir()
-	picoClawHome := t.TempDir()
+	spiderwebHome := t.TempDir()
 
 	wsDir := filepath.Join(openclawHome, "workspace")
 	os.MkdirAll(wsDir, 0o755)
@@ -663,9 +663,9 @@ func TestRunFullMigration(t *testing.T) {
 	os.WriteFile(filepath.Join(openclawHome, "openclaw.json"), data, 0o644)
 
 	opts := Options{
-		Force:        true,
-		OpenClawHome: openclawHome,
-		SpiderwebHome: picoClawHome,
+		Force:         true,
+		OpenClawHome:  openclawHome,
+		SpiderwebHome: spiderwebHome,
 	}
 
 	result, err := Run(opts)
@@ -673,9 +673,9 @@ func TestRunFullMigration(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	picoWs := filepath.Join(picoClawHome, "workspace")
+	spiderwebWs := filepath.Join(spiderwebHome, "workspace")
 
-	soulData, err := os.ReadFile(filepath.Join(picoWs, "SOUL.md"))
+	soulData, err := os.ReadFile(filepath.Join(spiderwebWs, "SOUL.md"))
 	if err != nil {
 		t.Fatalf("reading SOUL.md: %v", err)
 	}
@@ -683,7 +683,7 @@ func TestRunFullMigration(t *testing.T) {
 		t.Errorf("SOUL.md content = %q, want %q", string(soulData), "# Soul from OpenClaw")
 	}
 
-	agentsData, err := os.ReadFile(filepath.Join(picoWs, "AGENTS.md"))
+	agentsData, err := os.ReadFile(filepath.Join(spiderwebWs, "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("reading AGENTS.md: %v", err)
 	}
@@ -691,7 +691,7 @@ func TestRunFullMigration(t *testing.T) {
 		t.Errorf("AGENTS.md content = %q", string(agentsData))
 	}
 
-	memData, err := os.ReadFile(filepath.Join(picoWs, "memory", "MEMORY.md"))
+	memData, err := os.ReadFile(filepath.Join(spiderwebWs, "memory", "MEMORY.md"))
 	if err != nil {
 		t.Fatalf("reading memory/MEMORY.md: %v", err)
 	}
@@ -699,7 +699,7 @@ func TestRunFullMigration(t *testing.T) {
 		t.Errorf("MEMORY.md content = %q", string(memData))
 	}
 
-	picoConfig, err := config.LoadConfig(filepath.Join(picoClawHome, "config.json"))
+	picoConfig, err := config.LoadConfig(filepath.Join(spiderwebHome, "config.json"))
 	if err != nil {
 		t.Fatalf("loading Spiderweb config: %v", err)
 	}
@@ -729,7 +729,7 @@ func TestRunFullMigration(t *testing.T) {
 
 func TestRunOpenClawNotFound(t *testing.T) {
 	opts := Options{
-		OpenClawHome: "/nonexistent/path/to/openclaw",
+		OpenClawHome:  "/nonexistent/path/to/openclaw",
 		SpiderwebHome: t.TempDir(),
 	}
 
@@ -792,7 +792,7 @@ func TestCopyFile(t *testing.T) {
 
 func TestRunConfigOnly(t *testing.T) {
 	openclawHome := t.TempDir()
-	picoClawHome := t.TempDir()
+	spiderwebHome := t.TempDir()
 
 	wsDir := filepath.Join(openclawHome, "workspace")
 	os.MkdirAll(wsDir, 0o755)
@@ -809,10 +809,10 @@ func TestRunConfigOnly(t *testing.T) {
 	os.WriteFile(filepath.Join(openclawHome, "openclaw.json"), data, 0o644)
 
 	opts := Options{
-		Force:        true,
-		ConfigOnly:   true,
-		OpenClawHome: openclawHome,
-		SpiderwebHome: picoClawHome,
+		Force:         true,
+		ConfigOnly:    true,
+		OpenClawHome:  openclawHome,
+		SpiderwebHome: spiderwebHome,
 	}
 
 	result, err := Run(opts)
@@ -824,15 +824,15 @@ func TestRunConfigOnly(t *testing.T) {
 		t.Error("config should have been migrated")
 	}
 
-	picoWs := filepath.Join(picoClawHome, "workspace")
-	if _, err := os.Stat(filepath.Join(picoWs, "SOUL.md")); !os.IsNotExist(err) {
+	spiderwebWs := filepath.Join(spiderwebHome, "workspace")
+	if _, err := os.Stat(filepath.Join(spiderwebWs, "SOUL.md")); !os.IsNotExist(err) {
 		t.Error("config-only should not copy workspace files")
 	}
 }
 
 func TestRunWorkspaceOnly(t *testing.T) {
 	openclawHome := t.TempDir()
-	picoClawHome := t.TempDir()
+	spiderwebHome := t.TempDir()
 
 	wsDir := filepath.Join(openclawHome, "workspace")
 	os.MkdirAll(wsDir, 0o755)
@@ -852,7 +852,7 @@ func TestRunWorkspaceOnly(t *testing.T) {
 		Force:         true,
 		WorkspaceOnly: true,
 		OpenClawHome:  openclawHome,
-		SpiderwebHome:  picoClawHome,
+		SpiderwebHome: spiderwebHome,
 	}
 
 	result, err := Run(opts)
@@ -864,8 +864,8 @@ func TestRunWorkspaceOnly(t *testing.T) {
 		t.Error("workspace-only should not migrate config")
 	}
 
-	picoWs := filepath.Join(picoClawHome, "workspace")
-	soulData, err := os.ReadFile(filepath.Join(picoWs, "SOUL.md"))
+	spiderwebWs := filepath.Join(spiderwebHome, "workspace")
+	soulData, err := os.ReadFile(filepath.Join(spiderwebWs, "SOUL.md"))
 	if err != nil {
 		t.Fatalf("reading SOUL.md: %v", err)
 	}

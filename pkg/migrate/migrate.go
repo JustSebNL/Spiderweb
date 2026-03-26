@@ -153,7 +153,7 @@ func Execute(actions []Action, openclawHome, spiderwebHome string) *Result {
 	for _, action := range actions {
 		switch action.Type {
 		case ActionConvertConfig:
-			if err := executeConfigMigration(action.Source, action.Destination, spiderwebHome); err != nil {
+			if err := executeConfigMigration(action.Source, action.Destination); err != nil {
 				result.Errors = append(result.Errors, fmt.Errorf("config migration: %w", err))
 				fmt.Printf("  ✗ Config migration failed: %v\n", err)
 			} else {
@@ -211,7 +211,7 @@ func Execute(actions []Action, openclawHome, spiderwebHome string) *Result {
 	return result
 }
 
-func executeConfigMigration(srcConfigPath, dstConfigPath, picoClawHome string) error {
+func executeConfigMigration(srcConfigPath, dstConfigPath string) error {
 	data, err := LoadOpenClawConfig(srcConfigPath)
 	if err != nil {
 		return err

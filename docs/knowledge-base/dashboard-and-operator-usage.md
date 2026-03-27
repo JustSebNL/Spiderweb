@@ -6,6 +6,7 @@ This guide explains how to use the observer dashboard as an operator surface ins
 
 Interactive UI:
 - [../../ui/dashboard/observer.html](../../ui/dashboard/observer.html)
+- `http://127.0.0.1:8080/observer/ui`
 
 Observer JSON:
 - `/observer/dashboard`

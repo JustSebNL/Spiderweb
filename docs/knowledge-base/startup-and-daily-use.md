@@ -111,6 +111,7 @@ curl http://127.0.0.1:8080/observer/journal/latest
 
 Interactive operator UI:
 - [../../ui/dashboard/observer.html](../../ui/dashboard/observer.html)
+- `http://127.0.0.1:8080/observer/ui`
 
 Current dashboard/debug state:
 - the dashboard now has a functioning live operator surface

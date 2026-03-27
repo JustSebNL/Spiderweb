@@ -104,6 +104,10 @@ When `sweb gateway` is running, Spiderweb exposes local health and valve endpoin
 - `/valve/state`
 - `/valve/offer`
 
+Observer dashboard UI when gateway health server is running:
+
+- `/observer/ui`
+
 OpenClaw bridge endpoint when enabled:
 
 - `/bridge/openclaw`

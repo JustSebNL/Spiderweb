@@ -538,6 +538,32 @@ func TestObserverGenerateAndLatestReportHandlers(t *testing.T) {
 	}
 }
 
+func TestObserverUIHandler(t *testing.T) {
+	s := NewServer("127.0.0.1", 0)
+	s.SetReady(true)
+
+	ui := []byte("<!doctype html><html><body>ok</body></html>")
+	path := filepath.Join(t.TempDir(), "observer.html")
+	if err := os.WriteFile(path, ui, 0o644); err != nil {
+		t.Fatalf("write ui: %v", err)
+	}
+	t.Setenv("SPIDERWEB_OBSERVER_UI_HTML", path)
+
+	req := httptest.NewRequest(http.MethodGet, "/observer/ui", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected Cache-Control no-store, got %q", w.Header().Get("Cache-Control"))
+	}
+	if ct := w.Header().Get("Content-Type"); ct == "" {
+		t.Fatalf("expected Content-Type to be set")
+	}
+}
+
 func TestObserverJournalGenerateAndLatestHandlers(t *testing.T) {
 	s, _ := prepareObserverRuntime(t)
 

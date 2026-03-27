@@ -7,6 +7,7 @@ This directory is the local documentation spine for Spiderweb.
 - [Command Reference](./COMMANDS.md)
 - [Technical Guide](./TECHNICAL_GUIDE.md)
 - [Knowledge Base](./knowledge-base/README.md)
+- [Technical Knowledge Base](./technical-knowledge-base/README.md)
 
 ## Supporting Docs
 - [Cookbook](./cookbook/README.md)

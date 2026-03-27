@@ -137,6 +137,7 @@ func NewServer(host string, port int) *Server {
 	mux.HandleFunc("/intake/stats", s.intakeStatsHandler)
 	mux.HandleFunc("/observer/overview", s.observerOverviewHandler)
 	mux.HandleFunc("/observer/dashboard", s.observerDashboardHandler)
+	mux.HandleFunc("/observer/ui", s.observerUIHandler)
 	mux.HandleFunc("/observer/benchmarks", s.observerBenchmarksHandler)
 	mux.HandleFunc("/observer/services", s.observerServicesHandler)
 	mux.HandleFunc("/observer/agents", s.observerAgentsHandler)
